@@ -7,6 +7,7 @@
 // window or graphics exists, as the port's first allocations do.
 
 #include <windows.h>
+#include <intrin.h>
 
 #include <cstdint>
 #include <cstdio>
@@ -81,8 +82,7 @@ void* alloc_at(uintptr_t at, size_t size, DWORD type, const char** api)
 
 uintptr_t where_am_i(void*)
 {
-    volatile int local = 0;
-    return (uintptr_t)&local;
+    return (uintptr_t)_AddressOfReturnAddress();  // an address on the current stack
 }
 
 struct StackJob {
@@ -144,7 +144,7 @@ void run_probe()
         line("[INFO] MemoryManager not available");
     }
 
-    // 1. The image itself (needs a fixed low base: /BASE:0x400000 /DYNAMICBASE:NO).
+    // 1. The image itself (low-base variant: /BASE:0x400000 /HIGHENTROPYVA:NO; ASLR stays on).
     uintptr_t base = (uintptr_t)GetModuleHandleW(nullptr);
     result(base < 0x100000000ull, "image below 4 GiB", "module base %p", (void*)base);
 

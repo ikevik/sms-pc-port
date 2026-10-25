@@ -16,9 +16,11 @@ It reports, in a dialog and in `LocalState\probe.log`:
 It also lists the free low address space and the app memory limit.
 It does not exercise the TEB stack-bounds fix-up the Windows port does.
 
-Two variants are built: `fixed` links at `0x400000` with ASLR off (as the port does on
-Windows); `dynamic` keeps the default base, so the other checks still run if the
-loader refuses the fixed one.
+Two variants are built. The port's Windows build links at `0x400000` with ASLR off, but UWP's
+`/APPCONTAINER` rejects `/DYNAMICBASE:NO` (LNK1295), so that is not possible here. `low` links with
+`/BASE:0x400000 /HIGHENTROPYVA:NO`, which should load the image below 4 GiB at a random address
+(save states and the lockstep tracer assume fixed addresses, so that would need handling). `default` is
+the ordinary high-entropy image, as a control.
 
 ## Building
 

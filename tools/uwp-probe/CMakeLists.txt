@@ -1,18 +1,18 @@
 cmake_minimum_required(VERSION 3.20)
 project(uwp_probe C CXX ASM_MASM)
 
-# PROBE_FIXED_BASE=ON links the image at 0x400000 with ASLR off, as the Windows
-# build of the port does (CMakeLists.txt in the repo root). OFF leaves the
-# default dynamic base, so the other checks still run if the loader refuses
-# the fixed image.
-option(PROBE_FIXED_BASE "Link at 0x400000 with /DYNAMICBASE:NO" ON)
+# The Windows build of the port links at 0x400000 with ASLR off, but UWP's
+# /APPCONTAINER rejects /DYNAMICBASE:NO (LNK1295). PROBE_LOW_BASE=ON keeps ASLR
+# and sets /HIGHENTROPYVA:NO, which should make the loader place the image below
+# 4 GiB at a random address. OFF is the default high-entropy image, as a control.
+option(PROBE_LOW_BASE "Link with /BASE:0x400000 /HIGHENTROPYVA:NO" ON)
 
-if(PROBE_FIXED_BASE)
-  set(PROBE_ID    "SmsUwpProbeFixed")
-  set(PROBE_TITLE "SMS UWP Probe (fixed base)")
+if(PROBE_LOW_BASE)
+  set(PROBE_ID    "SmsUwpProbeLow")
+  set(PROBE_TITLE "SMS UWP Probe (low base)")
 else()
-  set(PROBE_ID    "SmsUwpProbeDynamic")
-  set(PROBE_TITLE "SMS UWP Probe (dynamic base)")
+  set(PROBE_ID    "SmsUwpProbeDefault")
+  set(PROBE_TITLE "SMS UWP Probe (default base)")
 endif()
 
 # UWP rejects the static CRT (MSB8024), so the app uses the DLL CRT and the manifest
@@ -32,8 +32,8 @@ if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION)
   endif()
 endif()
 
-if(PROBE_FIXED_BASE)
-  target_link_options(uwp-probe PRIVATE /BASE:0x400000 /DYNAMICBASE:NO /HIGHENTROPYVA:NO)
+if(PROBE_LOW_BASE)
+  target_link_options(uwp-probe PRIVATE /BASE:0x400000 /HIGHENTROPYVA:NO)
 endif()
 
 # Loose package layout for makeappx: the exe, AppxManifest.xml and Assets/.
