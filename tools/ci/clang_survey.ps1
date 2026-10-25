@@ -36,6 +36,8 @@ if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
   $n = "$vs\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja"
   if (Test-Path $n) { $env:PATH = "$n;$env:PATH" } else { choco install ninja -y --no-progress | Out-Host }
 }
+# Strawberry Perl's patch.exe (2.5.9) asserts on the decomp patches; drop it so Git's is used.
+$env:PATH = (($env:PATH -split ';') | Where-Object { $_ -and $_ -notmatch 'Strawberry' }) -join ';'
 # patch.exe, for decomp-patches/ (last, so MSVC's link.exe stays first on PATH)
 $env:PATH += ";$env:ProgramFiles\Git\usr\bin"
 
