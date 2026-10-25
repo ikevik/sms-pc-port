@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
+#include <cctype>
 #include <algorithm>
 #include <iterator>
 #include <utility>
@@ -34,8 +35,10 @@
 
 /* The decomp's configure.py passes -Dnullptr=0: nullptr is a plain 0, which
  * the game also assigns to integer fields (MActorAnmBck::unk28). Before C++11
- * it is no keyword (libc++ on macOS defines it as __nullptr in C++03 mode). */
-#if !defined(__cplusplus) || __cplusplus < 201103L
+ * it is no keyword (libc++ on macOS defines it as __nullptr in C++03 mode).
+ * MSVC's headers need C++14, so there it is the real keyword until here (every
+ * system header is included above) and a plain 0 from here on, as the game expects. */
+#if !defined(__cplusplus) || __cplusplus < 201103L || defined(_MSC_VER)
 #undef nullptr
 #define nullptr 0
 #endif

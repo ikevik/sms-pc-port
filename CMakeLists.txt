@@ -148,6 +148,8 @@ endif()
 # memory stays below 4 GiB (port_low_alloc), so nothing is lost.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   list(APPEND SMS_GAME_FLAGS -fms-extensions)
+  # C++11 made narrowing in braces and case labels an error; the game relies on the C++03 rule.
+  list(APPEND SMS_GAME_FLAGS $<$<COMPILE_LANGUAGE:CXX>:-Wno-c++11-narrowing>)
 endif()
 
 # macOS: x86_64 (Rosetta on Apple Silicon) with a 4 KiB PAGEZERO, so game
