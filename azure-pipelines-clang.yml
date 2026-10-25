@@ -1,0 +1,22 @@
+# Manual job: how far does the game build with clang targeting Windows (msvc)?
+# Create a second pipeline from this file and run it by hand; results are in the
+# run summary and the clang-survey artifact (summary.md plus the full logs).
+trigger: none
+pr: none
+
+pool:
+  vmImage: windows-2022
+
+timeoutInMinutes: 60
+
+steps:
+- checkout: self
+  submodules: recursive
+
+- powershell: ./tools/ci/clang_survey.ps1 -Build build-clang
+  displayName: Build survey with clang (msvc target)
+  continueOnError: true
+
+- publish: build-clang-survey
+  artifact: clang-survey
+  condition: always()
