@@ -396,8 +396,23 @@ else()
   set(_object_prefix "")
   set(SMS_OBJCOPY objcopy)
 endif()
-file(WRITE ${CMAKE_BINARY_DIR}/game_new_syms.txt
-  "${_object_prefix}_Znw${_sz} __sms_game_new\n${_object_prefix}_Zna${_sz} __sms_game_new_array\n${_object_prefix}_ZdlPv __sms_game_delete\n${_object_prefix}_ZdaPv __sms_game_delete_array\n")
+if(SMS_MSVC_TARGET)
+  # MSVC-ABI names (x64) of operator new, new[], delete, delete[] and the sized delete; GNU
+  # objcopy's Itanium names do not apply, and llvm-objcopy edits COFF archives.
+  get_filename_component(_llvm_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+  find_program(SMS_LLVM_OBJCOPY NAMES llvm-objcopy PATHS "${_llvm_bin}" NO_DEFAULT_PATH)
+  if(SMS_LLVM_OBJCOPY)
+    set(SMS_OBJCOPY "${SMS_LLVM_OBJCOPY}")
+  else()
+    message(WARNING "llvm-objcopy not found beside ${CMAKE_CXX_COMPILER}: the game's operator new is NOT renamed, and the result will not run")
+    set(SMS_OBJCOPY ${CMAKE_COMMAND} -E echo "skipped: llvm-objcopy missing")
+  endif()
+  file(WRITE ${CMAKE_BINARY_DIR}/game_new_syms.txt
+    "??2@YAPEAX_K@Z __sms_game_new\n??_U@YAPEAX_K@Z __sms_game_new_array\n??3@YAXPEAX@Z __sms_game_delete\n??_V@YAXPEAX@Z __sms_game_delete_array\n??3@YAXPEAX_K@Z __sms_game_delete\n??_V@YAXPEAX_K@Z __sms_game_delete_array\n")
+else()
+  file(WRITE ${CMAKE_BINARY_DIR}/game_new_syms.txt
+    "${_object_prefix}_Znw${_sz} __sms_game_new\n${_object_prefix}_Zna${_sz} __sms_game_new_array\n${_object_prefix}_ZdlPv __sms_game_delete\n${_object_prefix}_ZdaPv __sms_game_delete_array\n")
+endif()
 add_custom_command(TARGET sms_game POST_BUILD
   COMMAND ${SMS_OBJCOPY} --redefine-syms=${CMAKE_BINARY_DIR}/game_new_syms.txt $<TARGET_FILE:sms_game>
   COMMENT "Renaming the game's global operator new/delete")
@@ -458,7 +473,14 @@ target_compile_definitions(sms PRIVATE ${SMS_COMMON_DEFS} SMS_AUDIO_DSP_HLE=1)
 target_compile_options(sms PRIVATE -fno-strict-aliasing -Wno-unused-parameter -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
   $<$<COMPILE_LANGUAGE:CXX>:-std=${SMS_PLATFORM_CXX_STD}>)
 # dsptask.c points a DSP task at the fixed low-memory address 0x80004600.
-if(WIN32)
+if(SMS_MSVC_TARGET)
+  # lld-link has no --defsym: win_symbols.cpp defines lbl_80004600 as an absolute symbol.
+  # Game pointers pass through u32 slots, so the image must load below 4 GiB. UWP forbids
+  # /DYNAMICBASE:NO (LNK1295), so ASLR stays on and /HIGHENTROPYVA:NO keeps it in the low
+  # range; the image then moves between runs (save states assume fixed addresses).
+  target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/win_symbols.cpp)
+  target_link_options(sms PRIVATE -Wl,/BASE:0x400000 -Wl,/HIGHENTROPYVA:NO)
+elseif(WIN32)
   target_link_options(sms PRIVATE "-Wl,--defsym=${_object_prefix}lbl_80004600=0x80004600")
   if(SMS_ARCH STREQUAL "32")
     # At its preferred address every run, for save states (see -fno-pie above).
@@ -504,14 +526,22 @@ endif()
 # they are, and tools/savestate_ranges.py writes that into the executable.
 if(APPLE)
   target_link_options(sms PRIVATE "LINKER:-map,${CMAKE_BINARY_DIR}/sms.map")
+elseif(SMS_MSVC_TARGET)
+  target_link_options(sms PRIVATE "-Wl,/MAP:${CMAKE_BINARY_DIR}/sms.map")
 else()
   target_link_options(sms PRIVATE "LINKER:-Map=${CMAKE_BINARY_DIR}/sms.map")
 endif()
+if(SMS_MSVC_TARGET)
+  # savestate_ranges.py reads GNU ld and ld64 maps, not lld-link's: save states are not
+  # supported on this target until it does.
+  message(STATUS "SMS port: save states are not recorded on the msvc target")
+else()
 add_custom_command(TARGET sms POST_BUILD
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/savestate_ranges.py
     --map ${CMAKE_BINARY_DIR}/sms.map --exe $<TARGET_FILE:sms>
     --archive libsms_game.a --archive libsms_eclipse.a
   COMMENT "Recording the game's data for save states")
+endif()
 if(SMS_MAC_ARM64)
   # That rewrote the executable after the linker signed it, and arm64 macOS
   # kills a process whose signature does not match: sign it again (ad hoc).
@@ -560,6 +590,15 @@ if(APPLE)
     target_link_libraries(sms PRIVATE sms_gx)
     add_dependencies(sms sms_gx)
   endif()
+elseif(SMS_MSVC_TARGET)
+  # lld-link: /WHOLEARCHIVE pulls every member (the GNU --whole-archive is ignored), which
+  # lets the strong GXPC_* definitions replace the weak references in the platform layer.
+  target_link_libraries(sms PRIVATE sms_game Threads::Threads)
+  target_link_options(sms PRIVATE "-Wl,/WHOLEARCHIVE:$<TARGET_FILE:sms_game>")
+  if(TARGET sms_gx)
+    target_link_libraries(sms PRIVATE sms_gx)
+    target_link_options(sms PRIVATE "-Wl,/WHOLEARCHIVE:$<TARGET_FILE:sms_gx>")
+  endif()
 else()
   target_link_libraries(sms PRIVATE -Wl,--whole-archive sms_game -Wl,--no-whole-archive Threads::Threads m ${CMAKE_DL_LIBS})
   if(TARGET sms_gx)
@@ -582,6 +621,9 @@ endif()
 option(SMS_ECLIPSE "Build Super Mario Eclipse in (fetches its sources, see docs/ECLIPSE.md)" OFF)
 if(SMS_ECLIPSE)
   include(cmake/eclipse.cmake)
+elseif(SMS_MSVC_TARGET)
+  # The same null imports as below, as absolute symbols in win_symbols.cpp (no --defsym).
+  target_compile_definitions(sms PRIVATE SMS_NULL_MOD_IMPORTS=1)
 elseif(WIN32)
   # COFF x64 does not resolve these optional weak data imports to null.
   # Only standard Sunshine uses null imports; Eclipse must supply real ones.
