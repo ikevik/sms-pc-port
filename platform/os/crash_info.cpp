@@ -87,7 +87,15 @@ void port_crash_emit(PortCrashLine& line)
 
 bool port_crash_read(void* to, uintptr_t from, size_t size)
 {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(SMS_UWP)
+	// ReadProcessMemory is not a UWP API: copy under structured exception handling instead.
+	__try {
+		memcpy(to, (const void*)from, size);
+		return true;
+	} __except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+#elif defined(_WIN32)
 	SIZE_T copied = 0;
 	return ReadProcessMemory(GetCurrentProcess(), (const void*)from, to, size, &copied) && copied == size;
 #elif defined(__APPLE__)

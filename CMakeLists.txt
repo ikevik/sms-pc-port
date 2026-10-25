@@ -447,10 +447,18 @@ list(FILTER SMS_PLATFORM_SOURCES EXCLUDE REGEX "/tests/")
 if(WIN32 OR APPLE)
   list(FILTER SMS_PLATFORM_SOURCES EXCLUDE REGEX "/platform/trace/trace\\.cpp$")
 endif()
+if(SMS_UWP)
+  # Desktop-only: replaced by src/win_posix/uwp_stubs.cpp
+  list(FILTER SMS_PLATFORM_SOURCES EXCLUDE REGEX "/platform/os/windows_crash\\.cpp$")
+  list(FILTER SMS_PLATFORM_SOURCES EXCLUDE REGEX "/platform/pad/gc_adapter\\.cpp$")
+endif()
 add_executable(sms ${SMS_PORT_SRC}/port_main.cpp ${SMS_PLATFORM_SOURCES})
 if(SMS_MSVC_TARGET)
   target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/win_posix.cpp)
   target_compile_definitions(sms PRIVATE SMS_PLATFORM_UNIT=1)
+  if(SMS_UWP)
+    target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/uwp_stubs.cpp)
+  endif()
 endif()
 # MSL's maths and the MTX/VEC library round every operation to single or
 # double as the Gekko does: SSE on x86 (never x87 extended precision) and no

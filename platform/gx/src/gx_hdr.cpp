@@ -51,7 +51,7 @@
 #include <string>
 #include <vector>
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(SMS_UWP)  // HDR uses DirectComposition and display queries UWP lacks
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -79,7 +79,7 @@ namespace gx {
 unsigned g_presentFbo = 0;
 }
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(SMS_UWP)
 namespace {
 using gx::logmsg;
 
