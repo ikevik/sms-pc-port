@@ -65,7 +65,13 @@ $cmakeArgs = @('-S', '.', '-B', $Build, '-G', 'Ninja',
   '-DCMAKE_BUILD_TYPE=RelWithDebInfo', '-DSMS_ARCH=64', '-DSMS_WITH_GX=ON',
   '-DSMS_GAME_CXX_STD=gnu++14', '-DSMS_PLATFORM_CXX_STD=gnu++14')
 if (Test-Path $sdlCmake) { $cmakeArgs += "-DSDL2_DIR=$sdlCmake" }
-if ($Uwp) { $cmakeArgs += '-DSMS_UWP=ON' }
+if ($Uwp) {
+  # The store CRT's startup calls RoInitialize (WindowsApp.lib), so even CMake's compiler checks
+  # need it; CMakeLists.txt sets the same libraries for the build proper.
+  $cmakeArgs += '-DSMS_UWP=ON', '-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY',
+    '-DCMAKE_C_STANDARD_LIBRARIES=-lWindowsApp.lib -loldnames',
+    '-DCMAKE_CXX_STANDARD_LIBRARIES=-lWindowsApp.lib -loldnames'
+}
 cmake @cmakeArgs *>&1 | Tee-Object "$out\configure.log" | Select-Object -Last 40 | Out-Host
 $configured = ($LASTEXITCODE -eq 0)
 
