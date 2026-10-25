@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         IgnorableNamespaces="uap">
+
+  <Identity Name="@PROBE_ID@" Publisher="CN=SmsDev" Version="1.0.0.0" ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>@PROBE_TITLE@</DisplayName>
+    <PublisherDisplayName>SmsDev</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <!-- EntryPoint is unverified for a C++/WinRT CoreApplication exe: the VS "Core App (C++/WinRT)"
+         template uses "<ProjectName>.App". If the app installs but will not launch, compare against
+         that template's manifest. -->
+    <Application Id="App" Executable="uwp-probe.exe" EntryPoint="uwp_probe.App">
+      <uap:VisualElements DisplayName="@PROBE_TITLE@"
+                          Square150x150Logo="Assets\Square150x150Logo.png"
+                          Square44x44Logo="Assets\Square44x44Logo.png"
+                          Description="Memory layout probe for the sms-pc-port Xbox build"
+                          BackgroundColor="#C81E1E">
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+</Package>

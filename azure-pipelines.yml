@@ -1,0 +1,61 @@
+trigger:
+  branches:
+    include: [ uwp-xbox ]
+
+pool:
+  vmImage: windows-2022
+
+strategy:
+  matrix:
+    fixed:
+      probeFixedBase: 'ON'
+      probeName: fixed
+    dynamic:
+      probeFixedBase: 'OFF'
+      probeName: dynamic
+
+steps:
+- checkout: self
+
+- powershell: |
+    cmake -S tools/uwp-probe -B build-probe-$(probeName) `
+      -G "Visual Studio 17 2022" -A x64 -T v143 `
+      -DCMAKE_TOOLCHAIN_FILE="$PWD/tools/uwp-probe/toolchain.cmake" `
+      -DPROBE_FIXED_BASE=$(probeFixedBase)
+    if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    cmake --build build-probe-$(probeName) --config Release
+    if ($LASTEXITCODE) { exit $LASTEXITCODE }
+  displayName: Configure and build probe ($(probeName) base)
+
+- powershell: |
+    $ErrorActionPreference = 'Stop'
+    $kits = 'C:\Program Files (x86)\Windows Kits\10\bin'
+    function Find-Tool($name) {
+      Get-ChildItem "$kits\10.*\x64\$name" |
+        Sort-Object { [version]$_.Directory.Parent.Name } | Select-Object -Last 1 -ExpandProperty FullName
+    }
+    $makeappx = Find-Tool 'makeappx.exe'
+    $signtool = Find-Tool 'signtool.exe'
+
+    $layout = "build-probe-$(probeName)\layout"
+    $out = "$env:BUILD_ARTIFACTSTAGINGDIRECTORY\probe-$(probeName)"
+    New-Item -ItemType Directory -Force $out | Out-Null
+
+    # Throwaway signing cert; its subject must equal Identity Publisher in the manifest.
+    $cert = New-SelfSignedCertificate -Type Custom -Subject 'CN=SmsDev' -KeyUsage DigitalSignature `
+      -CertStoreLocation Cert:\CurrentUser\My `
+      -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
+    $pw = [guid]::NewGuid().ToString()
+    $pfx = "$env:AGENT_TEMPDIRECTORY\probe.pfx"
+    Export-PfxCertificate -Cert $cert -FilePath $pfx -Password (ConvertTo-SecureString $pw -AsPlainText -Force) | Out-Null
+    Export-Certificate -Cert $cert -FilePath "$out\SmsDev.cer" | Out-Null
+
+    & $makeappx pack /d $layout /p "$out\uwp-probe-$(probeName).msix" /o
+    if ($LASTEXITCODE) { throw 'makeappx failed' }
+    & $signtool sign /fd SHA256 /f $pfx /p $pw "$out\uwp-probe-$(probeName).msix"
+    if ($LASTEXITCODE) { throw 'signtool failed' }
+    Remove-Item $pfx
+  displayName: Package and sign probe ($(probeName) base)
+
+- publish: $(Build.ArtifactStagingDirectory)/probe-$(probeName)
+  artifact: uwp-probe-$(probeName)
