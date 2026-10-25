@@ -2,6 +2,19 @@ cmake_minimum_required(VERSION 3.20)
 project(sms_port C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# clang targeting Windows with the MSVC runtime (also the UWP route): no pthread, no
+# POSIX headers. src/win_posix supplies the few the port uses, force-included and found
+# first on the include path. MinGW and the other hosts have them natively.
+set(SMS_MSVC_TARGET OFF)
+if(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+  set(SMS_MSVC_TARGET ON)
+  add_compile_definitions(NOMINMAX _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS
+    _CRT_NONSTDC_NO_DEPRECATE _CRT_DECLARE_NONSTDC_NAMES=1)
+  include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix)
+  add_compile_options("SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/win_posix.h\"")
+  message(STATUS "SMS port: msvc-target build, POSIX shim from src/win_posix")
+endif()
+
 # MinGW's own include folder is one of the compiler's system folders, which
 # CMake leaves off command lines. CMake reads that list from the compiler's
 # output and misses the folder when its path isn't ASCII (a Windows user name
@@ -404,6 +417,9 @@ if(WIN32 OR APPLE)
   list(FILTER SMS_PLATFORM_SOURCES EXCLUDE REGEX "/platform/trace/trace\\.cpp$")
 endif()
 add_executable(sms ${SMS_PORT_SRC}/port_main.cpp ${SMS_PLATFORM_SOURCES})
+if(SMS_MSVC_TARGET)
+  target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/win_posix.cpp)
+endif()
 # MSL's maths and the MTX/VEC library round every operation to single or
 # double as the Gekko does: SSE on x86 (never x87 extended precision) and no
 # contraction (their fused multiply-adds are explicit), on every host.
