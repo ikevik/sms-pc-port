@@ -62,7 +62,11 @@ void port_coop_join_virtual(void);
 extern int port_coop_in_p2;
 // platform/gx
 void GXPC_SetSplitView(int on, float x, float y, float w, float h) __attribute__((weak));
+#ifdef _MSC_VER
+extern "C" void GXPC_ExtOverlaySet(int panel, const char* text);  // COFF: no weak undefined; sms_gx is always linked
+#else
 void GXPC_ExtOverlaySet(int panel, const char* text) __attribute__((weak));
+#endif
 // ext/multiplayer/game/mp_spawn.cpp: the stage's scene.bin records
 int port_spawn_record_of(const void* object, const void** record, unsigned* size);
 // decomp-patches/zzzzzz-coop-01: ViewFrustumClipCheck's other view

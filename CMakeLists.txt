@@ -622,8 +622,8 @@ option(SMS_ECLIPSE "Build Super Mario Eclipse in (fetches its sources, see docs/
 if(SMS_ECLIPSE)
   include(cmake/eclipse.cmake)
 elseif(SMS_MSVC_TARGET)
-  # The same null imports as below, as absolute symbols in win_symbols.cpp (no --defsym).
-  target_compile_definitions(sms PRIVATE SMS_NULL_MOD_IMPORTS=1)
+  # No null weak imports on COFF: the optional mod tables are empty stand-ins instead
+  # (decomp-patches/zzzzzz-msvc-mod-table-stand-ins.patch).
 elseif(WIN32)
   # COFF x64 does not resolve these optional weak data imports to null.
   # Only standard Sunshine uses null imports; Eclipse must supply real ones.

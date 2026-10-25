@@ -86,7 +86,11 @@
 #include <string.h>
 
 // The window's text panels (platform/gx; absent in a build without a window).
+#ifdef _MSC_VER
+extern "C" void GXPC_ExtOverlaySet(int panel, const char* text);  // COFF: no weak undefined; sms_gx is always linked
+#else
 extern "C" void GXPC_ExtOverlaySet(int panel, const char* text) __attribute__((weak));
+#endif
 extern "C" void GXPC_ExtOverlayLabels(const GXPCLabel* labels, int count) __attribute__((weak));
 enum { OVERLAY_NOTICE = 0, OVERLAY_STATUS = 1 };
 

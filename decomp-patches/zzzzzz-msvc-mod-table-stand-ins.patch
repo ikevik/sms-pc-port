@@ -1,0 +1,17 @@
+Reason: COFF has no weak undefined data symbols (the MinGW build sets them to 0 with --defsym). On the msvc target define empty stand-ins for the optional code-mod tables.
+--- a/src/Player/MarioDraw.cpp
++++ b/src/Player/MarioDraw.cpp
+@@ -55,6 +55,13 @@
+ extern TMarioAnimeData sPlayerAnimeDatas[] SMS_MOD_WEAK_IMPORT;
+ extern unkTMarioAnimeFilesStruct sPlayerAnimeInfos[] SMS_MOD_WEAK_IMPORT;
+ extern size_t sPlayerAnimeInfosSize SMS_MOD_WEAK_IMPORT;
++#if defined(_MSC_VER)
++// COFF has no weak undefined symbols, so these are real (empty) tables. The game only reads
++// them where a mod patched a site, and no mod can be linked into this target.
++TMarioAnimeData sPlayerAnimeDatas[1];
++unkTMarioAnimeFilesStruct sPlayerAnimeInfos[1];
++size_t sPlayerAnimeInfosSize = 0;
++#endif
+ 
+ // Whether a weak symbol above is linked in.
+ static inline bool sms_mod_linked_(const void* p)

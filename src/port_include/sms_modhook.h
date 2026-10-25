@@ -20,6 +20,9 @@
 #ifdef TARGET_PC
 #if defined(__APPLE__)
 #define SMS_MOD_WEAK_IMPORT __attribute__((weak_import))
+#elif defined(_MSC_VER)
+/* COFF has no weak data imports: the tables are stand-ins (see MarioDraw.cpp) */
+#define SMS_MOD_WEAK_IMPORT
 #else
 #define SMS_MOD_WEAK_IMPORT __attribute__((weak))
 #endif

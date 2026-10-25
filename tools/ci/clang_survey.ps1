@@ -87,6 +87,21 @@ if ($configured) {
   Say 'configure failed; the summary will show why'
 }
 
+# When the link fails, show how the objects define the symbols involved (dumpbin ships with MSVC).
+if ($configured -and -not (Test-Path "$Build\sms.exe")) {
+  Say 'link diagnostics'
+  $diag = foreach ($o in @(
+      'CMakeFiles\sms_game.dir\ext\multiplayer\game\mp_game.cpp.obj',
+      'CMakeFiles\sms_game.dir\ext\multiplayer\game\mp_server.cpp.obj',
+      'CMakeFiles\sms_game.dir\ext\coop\game\coop.cpp.obj',
+      'platform\gx\CMakeFiles\sms_gx.dir\src\gx_ext_overlay.cpp.obj')) {
+    "== $o"
+    $p = Join-Path $Build $o
+    if (Test-Path $p) { dumpbin /symbols $p | Select-String 'ExtOverlaySet|WeakExternal' } else { 'missing' }
+  }
+  $diag | Tee-Object "$out\link-diagnostics.log" | Select-Object -First 40 | Out-Host
+}
+
 python tools/ci/summarize_clang_errors.py $out | Out-Host
 Write-Host "##vso[task.uploadsummary]$out\summary.md"
 exit 0
