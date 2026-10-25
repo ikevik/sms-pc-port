@@ -25,12 +25,12 @@ the ordinary high-entropy image, as a control.
 ## Building
 
 Needs Windows with Visual Studio 2022 (v143, UWP workload and Windows SDK). From the repo root,
-the `azure-pipelines.yml` job does this and publishes `uwp-probe-fixed` and `uwp-probe-dynamic`
+the `azure-pipelines.yml` job does this and publishes `uwp-probe-low` and `uwp-probe-default`
 artifacts (`.msix` plus `SmsDev.cer`). Locally:
 
 ```powershell
 cmake -S tools/uwp-probe -B build-probe -G "Visual Studio 17 2022" -A x64 -T v143 `
-  -DCMAKE_TOOLCHAIN_FILE="$PWD/tools/uwp-probe/toolchain.cmake" -DPROBE_FIXED_BASE=ON
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/tools/uwp-probe/toolchain.cmake" -DPROBE_LOW_BASE=ON
 cmake --build build-probe --config Release
 ```
 
