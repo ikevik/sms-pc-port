@@ -14,6 +14,7 @@
 #include <cstdarg>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include <winrt/Windows.ApplicationModel.Core.h>
 #include <winrt/Windows.Foundation.h>
@@ -209,6 +210,16 @@ void run_probe()
     line("%s: %d check(s) failed", g_fail ? "RESULT FAIL" : "RESULT OK", g_fail);
 }
 
+void show_page(CoreDispatcher const& d, std::vector<std::wstring> pages, size_t i)
+{
+    std::wstring title = L"sms uwp-probe " + std::to_wstring(i + 1) + L"/" + std::to_wstring(pages.size());
+    Windows::UI::Popups::MessageDialog dlg(pages[i], title);
+    dlg.ShowAsync().Completed([d, pages, i](auto const&, auto) {
+        if (i + 1 < pages.size())
+            d.RunAsync(CoreDispatcherPriority::Normal, [d, pages, i] { show_page(d, pages, i + 1); });
+    });
+}
+
 struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
     CoreWindow window{nullptr};
 
@@ -230,9 +241,21 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
         }
 
         window.Activate();
-        std::wstring text(g_report.begin(), g_report.end());
-        Windows::UI::Popups::MessageDialog dlg(text, L"sms uwp-probe");
-        dlg.ShowAsync();
+        // A dialog clips at about 7 lines on the console, so show the report in pages.
+        std::vector<std::wstring> pages;
+        std::string cur;
+        int n = 0;
+        for (char c : g_report) {
+            cur += c;
+            if (c == '\n' && ++n == 6) {
+                pages.emplace_back(cur.begin(), cur.end());
+                cur.clear();
+                n = 0;
+            }
+        }
+        if (!cur.empty())
+            pages.emplace_back(cur.begin(), cur.end());
+        show_page(window.Dispatcher(), pages, 0);
         window.Dispatcher().ProcessEvents(CoreProcessEventsOption::ProcessUntilQuit);
     }
 };
