@@ -1186,7 +1186,11 @@ int GXPC_MouseCaptured(void) {
     return 0;
 #endif
 }
+#ifdef SMS_GX_HAVE_SDL2
 int GXPC_GameInputBlocked(void) { return menuVisible(); }
+#else
+int GXPC_GameInputBlocked(void) { return 0; }  // no window, no menus (menuVisible needs SDL2)
+#endif
 int GXPC_RequestQuit(void) {
 #ifdef SMS_GX_HAVE_SDL2
     if (s_mode != MODE_WINDOW || !s_window) return 0;

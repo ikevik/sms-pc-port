@@ -1,8 +1,15 @@
 # Manual job: how far does the game build with clang targeting Windows (msvc)?
 # Create a second pipeline from this file and run it by hand; results are in the
 # run summary and the clang-survey artifact (summary.md plus the full logs).
+# Tick "uwp" to build against the UWP store libraries instead (what fails to link there).
 trigger: none
 pr: none
+
+parameters:
+- name: uwp
+  displayName: Target UWP (store libraries, AppContainer)
+  type: boolean
+  default: false
 
 jobs:
 - job: clang_survey
@@ -18,7 +25,7 @@ jobs:
   - checkout: self
     submodules: recursive
 
-  - powershell: ./tools/ci/clang_survey.ps1 -Build build-clang
+  - powershell: ./tools/ci/clang_survey.ps1 -Build build-clang -Uwp:$${{ parameters.uwp }}
     displayName: Build survey with clang (msvc target)
     continueOnError: true
 

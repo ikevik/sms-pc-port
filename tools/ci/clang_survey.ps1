@@ -4,7 +4,8 @@
 # Always exits 0 so the logs and summary can be published; read summary.md for the result.
 param(
   [string]$Build = 'build-clang',
-  [int]$TimeoutMin = 50
+  [int]$TimeoutMin = 50,
+  [switch]$Uwp   # UWP: the store environment and libraries, no SDL2 (see SMS_UWP in CMakeLists.txt)
 )
 $ErrorActionPreference = 'Continue'
 $deadline = (Get-Date).AddMinutes($TimeoutMin)
@@ -17,7 +18,8 @@ function Say($m) { Write-Host "== $m" }
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $vs = & $vswhere -latest -products '*' -property installationPath
 if (-not $vs) { Write-Host 'Visual Studio not found'; exit 0 }
-cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul 2>&1 && set" | ForEach-Object {
+$vcArgs = if ($Uwp) { 'x64 uwp' } else { 'x64' }
+cmd /c "`"$vs\VC\Auxiliary\Build\vcvarsall.bat`" $vcArgs >nul 2>&1 && set" | ForEach-Object {
   if ($_ -match '^([^=]+)=(.*)$') { Set-Item -Path "env:$($Matches[1])" -Value $Matches[2] }
 }
 
@@ -48,6 +50,7 @@ $env:PATH += ";$env:ProgramFiles\Git\usr\bin"
 $sdlVer = '2.30.11'
 $sdlDir = "$PWD\$Build-sdl"
 try {
+  if ($Uwp) { throw 'skipped for UWP' }
   Say "fetching SDL2 $sdlVer"
   Invoke-WebRequest "https://github.com/libsdl-org/SDL/releases/download/release-$sdlVer/SDL2-devel-$sdlVer-VC.zip" `
     -OutFile "$out\SDL2-devel.zip" -UseBasicParsing
@@ -62,6 +65,7 @@ $cmakeArgs = @('-S', '.', '-B', $Build, '-G', 'Ninja',
   '-DCMAKE_BUILD_TYPE=RelWithDebInfo', '-DSMS_ARCH=64', '-DSMS_WITH_GX=ON',
   '-DSMS_GAME_CXX_STD=gnu++14', '-DSMS_PLATFORM_CXX_STD=gnu++14')
 if (Test-Path $sdlCmake) { $cmakeArgs += "-DSDL2_DIR=$sdlCmake" }
+if ($Uwp) { $cmakeArgs += '-DSMS_UWP=ON' }
 cmake @cmakeArgs *>&1 | Tee-Object "$out\configure.log" | Select-Object -Last 40 | Out-Host
 $configured = ($LASTEXITCODE -eq 0)
 

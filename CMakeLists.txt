@@ -15,6 +15,22 @@ if(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_SIMULATE_ID STR
   message(STATUS "SMS port: msvc-target build, POSIX shim from src/win_posix")
 endif()
 
+# UWP (Xbox Dev Mode): the store family of Windows APIs, AppContainer, WindowsApp.lib in place of
+# kernel32 and the rest. Needs the store environment (vcvarsall x64 uwp). SDL2 has no clang-buildable
+# WinRT backend, so this build has no window, audio or pad yet: it exists to list what fails to build.
+option(SMS_UWP "Target UWP (needs SMS_MSVC_TARGET)" OFF)
+if(SMS_UWP)
+  if(NOT SMS_MSVC_TARGET)
+    message(FATAL_ERROR "SMS_UWP needs clang targeting Windows with the MSVC runtime")
+  endif()
+  add_compile_definitions(WINAPI_FAMILY=WINAPI_FAMILY_APP __WRL_NO_DEFAULT_LIB__ _WIN32_WINNT=0x0A00 SMS_UWP=1)
+  # No linking in the configure-time checks, and only the store umbrella library afterwards.
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+  set(CMAKE_C_STANDARD_LIBRARIES "-lWindowsApp.lib -loldnames")
+  set(CMAKE_CXX_STANDARD_LIBRARIES "-lWindowsApp.lib -loldnames")
+  message(STATUS "SMS port: UWP target")
+endif()
+
 # MinGW's own include folder is one of the compiler's system folders, which
 # CMake leaves off command lines. CMake reads that list from the compiler's
 # output and misses the folder when its path isn't ASCII (a Windows user name
@@ -480,6 +496,10 @@ if(SMS_MSVC_TARGET)
   # range; the image then moves between runs (save states assume fixed addresses).
   target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/win_symbols.cpp)
   target_link_options(sms PRIVATE -Wl,/BASE:0x400000 -Wl,/HIGHENTROPYVA:NO)
+  if(SMS_UWP)
+    # A UWP image runs in an AppContainer. The entry stays the console one until the WinRT entry exists.
+    target_link_options(sms PRIVATE -Wl,/APPCONTAINER -Wl,/WINMD:NO -Wl,/SUBSYSTEM:WINDOWS -Wl,/ENTRY:mainCRTStartup)
+  endif()
 elseif(WIN32)
   target_link_options(sms PRIVATE "-Wl,--defsym=${_object_prefix}lbl_80004600=0x80004600")
   if(SMS_ARCH STREQUAL "32")
