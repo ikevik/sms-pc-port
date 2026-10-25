@@ -104,6 +104,10 @@ include(${CMAKE_BINARY_DIR}/decomp_sources.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches.cmake)
 
 set(SMS_COMMON_DEFS GEKKO TARGET_PC VERSION_GMSE01 BUILD_VERSION=2 NDEBUG=1)
+# The C++ standards the game and the platform layer compile as. The defaults are what
+# every build has used; MSVC's own headers need C++14 or later (-DSMS_GAME_CXX_STD=gnu++14).
+set(SMS_GAME_CXX_STD "gnu++03" CACHE STRING "C++ standard for the decomp's game code")
+set(SMS_PLATFORM_CXX_STD "gnu++11" CACHE STRING "C++ standard for the platform layer")
 set(SMS_GAME_FLAGS
   -w -fno-strict-aliasing -fwrapv -fno-omit-frame-pointer
   # Retail MSL has no _FORTIFY_SOURCE checks (Ubuntu g++ enables them at -O1+;
@@ -112,7 +116,7 @@ set(SMS_GAME_FLAGS
   -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -fno-stack-protector
   # Float math without contraction (Gekko-like). SSE is x86-only; arm64 uses NEON.
   -ffp-contract=off
-  $<$<COMPILE_LANGUAGE:CXX>:-std=gnu++03 -fno-gnu-keywords -fpermissive -fno-threadsafe-statics>
+  $<$<COMPILE_LANGUAGE:CXX>:-std=${SMS_GAME_CXX_STD} -fno-gnu-keywords -fpermissive -fno-threadsafe-statics>
   $<$<COMPILE_LANGUAGE:C>:-std=gnu99 -fcommon>
   -include ${SMS_PORT_SRC}/port_compat.h)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|i.86)$" OR CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
@@ -433,7 +437,7 @@ target_include_directories(sms PRIVATE
   ${SMS_PORT_SRC}/port_include ${SMS_DECOMP_INCLUDE_DIRS})
 target_compile_definitions(sms PRIVATE ${SMS_COMMON_DEFS} SMS_AUDIO_DSP_HLE=1)
 target_compile_options(sms PRIVATE -fno-strict-aliasing -Wno-unused-parameter -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
-  $<$<COMPILE_LANGUAGE:CXX>:-std=gnu++11>)
+  $<$<COMPILE_LANGUAGE:CXX>:-std=${SMS_PLATFORM_CXX_STD}>)
 # dsptask.c points a DSP task at the fixed low-memory address 0x80004600.
 if(WIN32)
   target_link_options(sms PRIVATE "-Wl,--defsym=${_object_prefix}lbl_80004600=0x80004600")

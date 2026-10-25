@@ -46,7 +46,9 @@ $env:PATH += ";$env:ProgramFiles\Git\usr\bin"
 Say 'configure'
 cmake -S . -B $Build -G Ninja `
   -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ `
-  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSMS_ARCH=64 -DSMS_WITH_GX=OFF *>&1 |
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSMS_ARCH=64 -DSMS_WITH_GX=OFF `
+  -DSMS_GAME_CXX_STD=gnu++14 -DSMS_PLATFORM_CXX_STD=gnu++14 `
+  '-DCMAKE_CXX_FLAGS=-D_USE_MATH_DEFINES -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE' *>&1 |
   Tee-Object "$out\configure.log" | Select-Object -Last 40 | Out-Host
 $configured = ($LASTEXITCODE -eq 0)
 
