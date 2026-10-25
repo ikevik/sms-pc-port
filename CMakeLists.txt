@@ -506,7 +506,7 @@ if(SMS_MSVC_TARGET)
   target_link_options(sms PRIVATE -Wl,/BASE:0x400000 -Wl,/HIGHENTROPYVA:NO)
   if(SMS_UWP)
     # A UWP image runs in an AppContainer. The entry stays the console one until the WinRT entry exists.
-    target_link_options(sms PRIVATE -Wl,/APPCONTAINER -Wl,/WINMD:NO -Wl,/SUBSYSTEM:WINDOWS -Wl,/ENTRY:mainCRTStartup)
+    target_link_options(sms PRIVATE -Wl,/APPCONTAINER -Wl,/SUBSYSTEM:WINDOWS -Wl,/ENTRY:mainCRTStartup)
   endif()
 elseif(WIN32)
   target_link_options(sms PRIVATE "-Wl,--defsym=${_object_prefix}lbl_80004600=0x80004600")
@@ -621,7 +621,8 @@ if(APPLE)
 elseif(SMS_MSVC_TARGET)
   # lld-link: /WHOLEARCHIVE pulls every member (the GNU --whole-archive is ignored), which
   # lets the strong GXPC_* definitions replace the weak references in the platform layer.
-  target_link_libraries(sms PRIVATE sms_game Threads::Threads)
+  # Windows threads need no library; FindThreads names -lpthreads when it cannot link a test (UWP).
+  target_link_libraries(sms PRIVATE sms_game)
   target_link_options(sms PRIVATE "-Wl,/WHOLEARCHIVE:$<TARGET_FILE:sms_game>")
   if(TARGET sms_gx)
     target_link_libraries(sms PRIVATE sms_gx)
