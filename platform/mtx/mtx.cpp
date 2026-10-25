@@ -128,11 +128,28 @@ namespace mtx_fma {
 extern "C" {
 int sms_mtx_hw_fma = -1;
 }
+#if defined(_MSC_VER)
+#include <intrin.h>
+// clang's __builtin_cpu_supports needs compiler-rt's __cpu_model, which the msvc-target link
+// does not have: ask CPUID, and XGETBV for the OS saving the AVX state.
+__attribute__((target("xsave"))) static int mtx_cpu_has_fma()
+{
+	int r[4];
+	__cpuid(r, 1);
+	const bool fma = (r[2] >> 12) & 1, osxsave = (r[2] >> 27) & 1, avx = (r[2] >> 28) & 1;
+	return fma && osxsave && avx && (_xgetbv(0) & 6) == 6;
+}
+#else
+static int mtx_cpu_has_fma()
+{
+	__builtin_cpu_init();
+	return __builtin_cpu_supports("fma") ? 1 : 0;
+}
+#endif
 static int mtx_init_fma()
 {
 	const char* e = getenv("SMS_MTX_SOFT_FMA");
-	__builtin_cpu_init();
-	sms_mtx_hw_fma = (e && *e == '1') ? 0 : __builtin_cpu_supports("fma") ? 1 : 0;
+	sms_mtx_hw_fma = (e && *e == '1') ? 0 : mtx_cpu_has_fma();
 	return sms_mtx_hw_fma;
 }
 static inline bool mtx_have_fma()
