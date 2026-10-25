@@ -87,6 +87,16 @@ if ($configured) {
   Say 'configure failed; the summary will show why'
 }
 
+# A linked sms.exe goes in the artifact (bin/) with SDL2.dll, for trying it on a Windows PC:
+#   sms.exe path\to\GMSE01.iso
+if (Test-Path "$Build\sms.exe") {
+  New-Item -ItemType Directory -Force "$out\bin" | Out-Null
+  Copy-Item "$Build\sms.exe" "$out\bin\"
+  $dll = "$sdlDir\SDL2-$sdlVer\lib\x64\SDL2.dll"
+  if (Test-Path $dll) { Copy-Item $dll "$out\bin\" }
+  Say "sms.exe linked: $((Get-Item "$Build\sms.exe").Length / 1MB) MB"
+}
+
 # When the link fails, show how the objects define the symbols involved (dumpbin ships with MSVC).
 if ($configured -and -not (Test-Path "$Build\sms.exe")) {
   Say 'link diagnostics'
