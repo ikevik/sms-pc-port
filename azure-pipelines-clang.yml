@@ -4,19 +4,20 @@
 trigger: none
 pr: none
 
-pool:
-  vmImage: windows-2022
+jobs:
+- job: clang_survey
+  displayName: Clang (msvc target) build survey
+  timeoutInMinutes: 60
+  pool:
+    vmImage: windows-2022
+  steps:
+  - checkout: self
+    submodules: recursive
 
-timeoutInMinutes: 60
+  - powershell: ./tools/ci/clang_survey.ps1 -Build build-clang
+    displayName: Build survey with clang (msvc target)
+    continueOnError: true
 
-steps:
-- checkout: self
-  submodules: recursive
-
-- powershell: ./tools/ci/clang_survey.ps1 -Build build-clang
-  displayName: Build survey with clang (msvc target)
-  continueOnError: true
-
-- publish: build-clang-survey
-  artifact: clang-survey
-  condition: always()
+  - publish: build-clang-survey
+    artifact: clang-survey
+    condition: always()
