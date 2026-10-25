@@ -36,7 +36,8 @@ cmake --build build-probe --config Release
 
 ## Running on the console
 
-Install through the Xbox Device Portal. Each CI run signs with a fresh certificate, so uninstall the
+Install `Microsoft.VCLibs.x64.14.00.appx` (in the artifact) first if the console doesn't have it, then
+install through the Xbox Device Portal. Each CI run signs with a fresh certificate, so uninstall the
 previous probe first. If the console rejects the package, upload `SmsDev.cer` as well.
 Read the dialog, or open the app's `LocalState\probe.log` from the Device Portal file explorer.
 

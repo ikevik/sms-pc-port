@@ -15,8 +15,9 @@ else()
   set(PROBE_TITLE "SMS UWP Probe (dynamic base)")
 endif()
 
-# Static CRT: no Microsoft.VCLibs framework package to sideload on the console.
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# UWP rejects the static CRT (MSB8024), so the app uses the DLL CRT and the manifest
+# depends on the Microsoft.VCLibs.140.00 framework package.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
 add_executable(uwp-probe WIN32 probe.cpp stack_switch.asm)
 target_compile_features(uwp-probe PRIVATE cxx_std_17)

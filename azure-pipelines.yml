@@ -55,6 +55,12 @@ steps:
     & $signtool sign /fd SHA256 /f $pfx /p $pw "$out\uwp-probe-$(probeName).msix"
     if ($LASTEXITCODE) { throw 'signtool failed' }
     Remove-Item $pfx
+
+    # The framework package the app depends on, to install on the console first.
+    $vclibs = Get-ChildItem 'C:\Program Files (x86)\Microsoft SDKs\Windows Kits\10\ExtensionSDKs\Microsoft.VCLibs' `
+      -Recurse -Filter 'Microsoft.VCLibs.x64.14.00.appx' -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -notmatch 'Debug' } | Select-Object -First 1
+    if ($vclibs) { Copy-Item $vclibs.FullName $out } else { Write-Warning 'Microsoft.VCLibs.x64.14.00.appx not found' }
   displayName: Package and sign probe ($(probeName) base)
 
 - publish: $(Build.ArtifactStagingDirectory)/probe-$(probeName)
