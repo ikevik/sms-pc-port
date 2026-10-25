@@ -77,5 +77,8 @@ static __inline char* realpath(const char* path, char* resolved)
 }
 #endif
 
+/* MinGW's C++ headers bring in pthread.h; the port's files rely on that. */
+#include "pthread.h"
+
 #endif /* _WIN32 && _MSC_VER */
 #endif /* SMS_WIN_POSIX_H */

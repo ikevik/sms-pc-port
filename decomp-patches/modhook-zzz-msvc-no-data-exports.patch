@@ -1,0 +1,66 @@
+Reason: COFF (clang on the MSVC target) has no compiler alias attribute and no Mach-O style .set of a mangled name; do not export the retail data names there. Mods that need them are not supported on that target.
+--- a/src/Player/MarioDraw.cpp
++++ b/src/Player/MarioDraw.cpp
+@@ -36,7 +36,9 @@
+ 
+ #ifdef TARGET_PC
+ // Code mods (sms_mod/modhooks.h) name this by its retail map name.
+-#if defined(__APPLE__)
++#if defined(_MSC_VER)
++// COFF has no alias attribute: the retail data names are not exported on the msvc target.
++#elif defined(__APPLE__)
+ __asm__(".globl _marioAnimeFiles\n.set _marioAnimeFiles, __ZL15marioAnimeFiles");
+ #else
+ extern unkTMarioAnimeFilesStruct portExport_marioAnimeFiles[] __asm__("marioAnimeFiles") __attribute__((alias("_ZL15marioAnimeFiles")));
+--- a/src/Player/Yoshi.cpp
++++ b/src/Player/Yoshi.cpp
+@@ -61,7 +61,9 @@
+ #endif
+ #ifdef TARGET_PC
+ // Code mods (sms_mod/modhooks.h) name this by its retail map name.
+-#if defined(__APPLE__)
++#if defined(_MSC_VER)
++// COFF has no alias attribute: the retail data names are not exported on the msvc target.
++#elif defined(__APPLE__)
+ __asm__(".globl _bodyColor\n.set _bodyColor, __ZL9bodyColor");
+ #else
+ extern GXColor portExport_bodyColor[] __asm__("bodyColor") __attribute__((alias("_ZL9bodyColor")));
+--- a/src/System/Application.cpp
++++ b/src/System/Application.cpp
+@@ -67,7 +67,9 @@
+ static void* arcBufMario;
+ #ifdef TARGET_PC
+ // Code mods (sms_mod/modhooks.h) name this by its retail map name.
+-#if defined(__APPLE__)
++#if defined(_MSC_VER)
++// COFF has no alias attribute: the retail data names are not exported on the msvc target.
++#elif defined(__APPLE__)
+ __asm__(".globl _arcBufMario\n.set _arcBufMario, __ZL11arcBufMario");
+ #else
+ extern void* portExport_arcBufMario __asm__("arcBufMario") __attribute__((alias("_ZL11arcBufMario")));
+--- a/src/Enemy/graph.cpp
++++ b/src/Enemy/graph.cpp
+@@ -134,7 +134,9 @@
+ };
+ #ifdef TARGET_PC
+ // Code mods use it by its retail address (platform/mods/eclipse/rawdata.cpp).
+-#if defined(__APPLE__)
++#if defined(_MSC_VER)
++// COFF has no alias attribute: the retail data names are not exported on the msvc target.
++#elif defined(__APPLE__)
+ __asm__(".globl _sms_port_grDummyRail\n.set _sms_port_grDummyRail, __ZL11grDummyRail");
+ #else
+ extern TRailNode sms_port_grDummyRail[3] __asm__("sms_port_grDummyRail") __attribute__((alias("_ZL11grDummyRail")));
+--- a/src/MoveBG/MapObjInit.cpp
++++ b/src/MoveBG/MapObjInit.cpp
+@@ -10814,7 +10814,9 @@
+ };
+ #ifdef TARGET_PC
+ // Code mods (sms_mod/modhooks.h) name this by its retail map name.
+-#if defined(__APPLE__)
++#if defined(_MSC_VER)
++// COFF has no alias attribute: the retail data names are not exported on the msvc target.
++#elif defined(__APPLE__)
+ __asm__(".globl _sObjDataTable\n.set _sObjDataTable, __ZL13sObjDataTable");
+ #else
+ extern TMapObjData* portExport_sObjDataTable[] __asm__("sObjDataTable") __attribute__((alias("_ZL13sObjDataTable")));

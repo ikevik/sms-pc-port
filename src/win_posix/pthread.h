@@ -42,6 +42,8 @@ int pthread_attr_setdetachstate(pthread_attr_t* attr, int state);
 int pthread_create(pthread_t* thread, const pthread_attr_t* attr, void* (*start)(void*), void* arg);
 int pthread_join(pthread_t thread, void** result);
 int pthread_detach(pthread_t thread);
+/* winpthreads' non-blocking join, which os_thread.cpp calls on Windows */
+int _pthread_tryjoin(pthread_t thread, void** result);
 pthread_t pthread_self(void);
 int pthread_equal(pthread_t a, pthread_t b);
 __attribute__((noreturn)) void pthread_exit(void* result);

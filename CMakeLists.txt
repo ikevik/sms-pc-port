@@ -419,6 +419,7 @@ endif()
 add_executable(sms ${SMS_PORT_SRC}/port_main.cpp ${SMS_PLATFORM_SOURCES})
 if(SMS_MSVC_TARGET)
   target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/win_posix.cpp)
+  target_compile_definitions(sms PRIVATE SMS_PLATFORM_UNIT=1)
 endif()
 # MSL's maths and the MTX/VEC library round every operation to single or
 # double as the Gekko does: SSE on x86 (never x87 extended precision) and no

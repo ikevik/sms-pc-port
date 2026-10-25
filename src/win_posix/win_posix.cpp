@@ -217,6 +217,17 @@ extern "C" int pthread_join(pthread_t thread, void** result)
 	return 0;
 }
 
+extern "C" int _pthread_tryjoin(pthread_t thread, void** result)
+{
+	Thread* t = (Thread*)thread;
+	if (WaitForSingleObject(t->handle, 0) != WAIT_OBJECT_0)
+		return EBUSY;
+	if (result)
+		*result = t->result;
+	release(t);
+	return 0;
+}
+
 extern "C" int pthread_detach(pthread_t thread)
 {
 	release((Thread*)thread);
