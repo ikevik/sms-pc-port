@@ -64,6 +64,10 @@ if(APPLE)
     target_include_directories(sms_gx PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
     target_link_libraries(sms_gx PUBLIC "-framework CoreFoundation")
 endif()
+if(SMS_MSVC_TARGET)
+    # The Windows SDK has no GL/glcorearb.h either (MinGW's headers do).
+    target_include_directories(sms_gx PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+endif()
 target_compile_features(sms_gx PRIVATE cxx_std_17)
 # The SDK functions here that compute in floats round every operation as the
 # DOL's objects do, which MWCC built without contraction: no host compiler may

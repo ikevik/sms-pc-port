@@ -43,12 +43,26 @@ $env:PATH += ";$env:ProgramFiles\Git\usr\bin"
 
 (clang++ --version) + (cmake --version) + (python --version) | Tee-Object "$out\toolchain.txt" | Out-Host
 
+# SDL2's headers and import library, the version build.sh pins (the survey only compiles and links;
+# a UWP build needs SDL2's WinRT backend instead).
+$sdlVer = '2.30.11'
+$sdlDir = "$PWD\$Build-sdl"
+try {
+  Say "fetching SDL2 $sdlVer"
+  Invoke-WebRequest "https://github.com/libsdl-org/SDL/releases/download/release-$sdlVer/SDL2-devel-$sdlVer-VC.zip" `
+    -OutFile "$out\SDL2-devel.zip" -UseBasicParsing
+  Expand-Archive "$out\SDL2-devel.zip" $sdlDir -Force
+  Remove-Item "$out\SDL2-devel.zip"
+} catch { Write-Host "SDL2 download failed: $_" }
+$sdlCmake = "$sdlDir\SDL2-$sdlVer\cmake"
+
 Say 'configure'
-cmake -S . -B $Build -G Ninja `
-  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ `
-  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSMS_ARCH=64 -DSMS_WITH_GX=ON `
-  -DSMS_GAME_CXX_STD=gnu++14 -DSMS_PLATFORM_CXX_STD=gnu++14 *>&1 |
-  Tee-Object "$out\configure.log" | Select-Object -Last 40 | Out-Host
+$cmakeArgs = @('-S', '.', '-B', $Build, '-G', 'Ninja',
+  '-DCMAKE_C_COMPILER=clang', '-DCMAKE_CXX_COMPILER=clang++',
+  '-DCMAKE_BUILD_TYPE=RelWithDebInfo', '-DSMS_ARCH=64', '-DSMS_WITH_GX=ON',
+  '-DSMS_GAME_CXX_STD=gnu++14', '-DSMS_PLATFORM_CXX_STD=gnu++14')
+if (Test-Path $sdlCmake) { $cmakeArgs += "-DSDL2_DIR=$sdlCmake" }
+cmake @cmakeArgs *>&1 | Tee-Object "$out\configure.log" | Select-Object -Last 40 | Out-Host
 $configured = ($LASTEXITCODE -eq 0)
 
 function Run-Ninja([string[]]$targets, [string]$log) {

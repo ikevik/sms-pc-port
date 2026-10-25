@@ -59,7 +59,12 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#ifdef _MSC_VER
+// The Windows SDK's d3d11.h pulls in d3d10_1.h, which refuses to follow d3d10.h.
+#include <d3d10_1.h>
+#else
 #include <d3d10.h>
+#endif
 #include <d3d11_4.h>
 #include <d3dcompiler.h>
 #include <dcomp.h>
