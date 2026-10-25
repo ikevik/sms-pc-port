@@ -8,6 +8,9 @@
 
 #include <windows.h>
 #include <intrin.h>
+#include <d3d11.h>
+#include <dxgi1_4.h>
+#include <unknwn.h>
 
 #include <cstdint>
 #include <cstdio>
@@ -98,7 +101,7 @@ DWORD WINAPI stack_thread(void* arg)
     return 0;
 }
 
-void survey_low_space()
+size_t low_report(const char* tag)
 {
     // How much of 0x10000000..0x80000000 is still free: what the loader, the
     // runtime and the system already took before this code ran.
@@ -121,7 +124,8 @@ void survey_low_space()
             break;
         a = end;
     }
-    line("[INFO] low 0x10000000..0x80000000: %zu MiB free, largest block %zu MiB", freeTotal >> 20, largest >> 20);
+    line("[INFO] low range, %s: %zu MiB free, largest %zu MiB", tag, freeTotal >> 20, largest >> 20);
+    return freeTotal;
 }
 
 void run_probe()
@@ -149,7 +153,7 @@ void run_probe()
     uintptr_t base = (uintptr_t)GetModuleHandleW(nullptr);
     result(base < 0x100000000ull, "image below 4 GiB", "module base %p", (void*)base);
 
-    survey_low_space();
+    low_report("at start");
 
     // 2. MEM1 at exactly 0x80000000.
     const char* api = "";
@@ -206,8 +210,166 @@ void run_probe()
         result(false, "low stacks", "skipped, no pool");
     }
 
-    survey_low_space();
-    line("%s: %d check(s) failed", g_fail ? "RESULT FAIL" : "RESULT OK", g_fail);
+    low_report("after setup");
+}
+
+bool hr_ok(HRESULT hr, const char* what)
+{
+    if (FAILED(hr)) {
+        result(false, what, "HRESULT 0x%08lX", (unsigned long)hr);
+        return false;
+    }
+    return true;
+}
+
+// A fresh 128 MiB reserve in the low range, a stack in it, code run on a worker
+// thread: what the port does for each new game thread.
+void low_stack_test(const char* tag)
+{
+    char* pool = nullptr;
+    for (uintptr_t at = kLowLo; at + kPoolSize <= kLowHi && !pool; at += 0x100000u)
+        pool = (char*)VirtualAlloc((void*)at, kPoolSize, MEM_RESERVE, PAGE_NOACCESS);
+    if (!pool) {
+        result(false, tag, "no free 128 MiB window left in the low range");
+        return;
+    }
+    const size_t kStack = 1u << 20;
+    void* s = VirtualAlloc(pool, kStack, MEM_COMMIT, PAGE_READWRITE);
+    StackJob job = {s ? (char*)s + kStack : nullptr, 0};
+    HANDLE h = s ? CreateThread(nullptr, 0, stack_thread, &job, 0, nullptr) : nullptr;
+    if (h) {
+        WaitForSingleObject(h, 5000);
+        CloseHandle(h);
+    }
+    result(h && job.rsp >= (uintptr_t)s && job.rsp < (uintptr_t)s + kStack, tag, "pool %p, stack ran at %p", (void*)pool,
+           (void*)job.rsp);
+    VirtualFree(pool, 0, MEM_RELEASE);
+}
+
+// D3D11 device, a 4K swap chain on the CoreWindow and ~512 MiB of textures, then
+// the low-address checks again: does the GPU stack take the space the port needs?
+void run_gpu_probe(CoreWindow const& window)
+{
+    line("--- GPU phase (D3D11) ---");
+    try {
+        const size_t freeBefore = low_report("before D3D11");
+
+        com_ptr<ID3D11Device> dev;
+        com_ptr<ID3D11DeviceContext> ctx;
+        D3D_FEATURE_LEVEL fl = {};
+        const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
+        HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels, 2,
+                                       D3D11_SDK_VERSION, dev.put(), &fl, ctx.put());
+        if (!hr_ok(hr, "D3D11CreateDevice"))
+            return;
+        result(true, "D3D11 device", "feature level 0x%x", (unsigned)fl);
+        low_report("after device");
+
+        com_ptr<IDXGIDevice> dxgiDev = dev.as<IDXGIDevice>();
+        com_ptr<IDXGIAdapter> adapter;
+        dxgiDev->GetAdapter(adapter.put());
+        DXGI_ADAPTER_DESC ad = {};
+        adapter->GetDesc(&ad);
+        char name[128] = {};
+        WideCharToMultiByte(CP_UTF8, 0, ad.Description, -1, name, sizeof name, nullptr, nullptr);
+        line("[INFO] GPU %s: dedicated %zu MiB, shared %zu MiB", name, (size_t)(ad.DedicatedVideoMemory >> 20),
+             (size_t)(ad.SharedSystemMemory >> 20));
+        if (auto a3 = adapter.try_as<IDXGIAdapter3>()) {
+            DXGI_QUERY_VIDEO_MEMORY_INFO vi = {};
+            if (SUCCEEDED(a3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &vi)))
+                line("[INFO] GPU local budget %llu MiB, in use %llu MiB", vi.Budget >> 20, vi.CurrentUsage >> 20);
+        }
+
+        com_ptr<IDXGIFactory2> factory;
+        adapter->GetParent(IID_PPV_ARGS(factory.put()));
+        DXGI_SWAP_CHAIN_DESC1 sd = {};
+        sd.Width = 3840;
+        sd.Height = 2160;
+        sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        sd.SampleDesc.Count = 1;
+        sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        sd.BufferCount = 2;
+        sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+        com_ptr<IDXGISwapChain1> sc;
+        hr = factory->CreateSwapChainForCoreWindow(dev.get(), winrt::get_unknown(window), &sd, nullptr, sc.put());
+        if (hr_ok(hr, "swap chain 3840x2160")) {
+            com_ptr<ID3D11Texture2D> bb;
+            sc->GetBuffer(0, IID_PPV_ARGS(bb.put()));
+            com_ptr<ID3D11RenderTargetView> rtv;
+            dev->CreateRenderTargetView(bb.get(), nullptr, rtv.put());
+            const float green[4] = {0.f, 0.6f, 0.f, 1.f};
+            ctx->ClearRenderTargetView(rtv.get(), green);
+            result(SUCCEEDED(sc->Present(1, 0)), "swap chain present", "ok");
+        }
+        low_report("after swap chain");
+
+        // ~512 MiB of 2048x2048 RGBA8 render targets, cleared so the memory is really used.
+        std::vector<com_ptr<ID3D11Texture2D>> tex;
+        std::vector<com_ptr<ID3D11RenderTargetView>> views;
+        D3D11_TEXTURE2D_DESC td = {};
+        td.Width = td.Height = 2048;
+        td.MipLevels = td.ArraySize = 1;
+        td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        td.SampleDesc.Count = 1;
+        td.Usage = D3D11_USAGE_DEFAULT;
+        td.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        for (int i = 0; i < 32; i++) {
+            com_ptr<ID3D11Texture2D> t;
+            if (FAILED(dev->CreateTexture2D(&td, nullptr, t.put())))
+                break;
+            com_ptr<ID3D11RenderTargetView> v;
+            dev->CreateRenderTargetView(t.get(), nullptr, v.put());
+            const float c[4] = {i / 32.f, 0.f, 0.f, 1.f};
+            ctx->ClearRenderTargetView(v.get(), c);
+            tex.push_back(t);
+            views.push_back(v);
+        }
+        ctx->Flush();
+        result(tex.size() >= 32, "GPU textures", "%zu x 16 MiB created", tex.size());
+
+        // CPU-visible mappings: where the driver puts them (the port streams vertices this way).
+        D3D11_TEXTURE2D_DESC sdsc = td;
+        sdsc.Usage = D3D11_USAGE_STAGING;
+        sdsc.BindFlags = 0;
+        sdsc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        com_ptr<ID3D11Texture2D> staging;
+        D3D11_MAPPED_SUBRESOURCE m = {};
+        if (SUCCEEDED(dev->CreateTexture2D(&sdsc, nullptr, staging.put())) &&
+            SUCCEEDED(ctx->Map(staging.get(), 0, D3D11_MAP_WRITE, 0, &m))) {
+            line("[INFO] staging texture mapped at %p%s", m.pData, (uintptr_t)m.pData < 0x100000000ull ? " (below 4 GiB)" : "");
+            ctx->Unmap(staging.get(), 0);
+        }
+        D3D11_BUFFER_DESC bd = {};
+        bd.ByteWidth = 16u << 20;
+        bd.Usage = D3D11_USAGE_DYNAMIC;
+        bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        com_ptr<ID3D11Buffer> vb;
+        if (SUCCEEDED(dev->CreateBuffer(&bd, nullptr, vb.put())) &&
+            SUCCEEDED(ctx->Map(vb.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
+            line("[INFO] dynamic buffer mapped at %p%s", m.pData, (uintptr_t)m.pData < 0x100000000ull ? " (below 4 GiB)" : "");
+            ctx->Unmap(vb.get(), 0);
+        }
+        try {
+            line("[INFO] app memory usage %llu MiB (limit %llu MiB)", Windows::System::MemoryManager::AppMemoryUsage() >> 20,
+                 Windows::System::MemoryManager::AppMemoryUsageLimit() >> 20);
+        } catch (...) {
+        }
+        const size_t freeAfter = low_report("with GPU resources");
+        result(freeAfter + (64u << 20) >= freeBefore, "GPU took little low space", "%lld MiB used by D3D11",
+               ((long long)freeBefore - (long long)freeAfter) >> 20);
+        low_stack_test("new low pool + stack after GPU init");
+
+        views.clear();
+        tex.clear();
+        staging = nullptr;
+        vb = nullptr;
+        ctx->ClearState();
+        ctx->Flush();
+        low_report("after releasing GPU resources");
+    } catch (winrt::hresult_error const& e) {
+        result(false, "GPU phase", "exception 0x%08X", (unsigned)(int32_t)e.code());
+    }
 }
 
 void show_page(CoreDispatcher const& d, std::vector<std::wstring> pages, size_t i)
@@ -233,6 +395,11 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
     {
         run_probe();  // before Activate(): the earliest the port would allocate too
 
+        window.Activate();
+        window.Dispatcher().ProcessEvents(CoreProcessEventsOption::ProcessAllIfPresent);
+        run_gpu_probe(window);
+        line("%s: %d check(s) failed", g_fail ? "RESULT FAIL" : "RESULT OK", g_fail);
+
         try {
             std::wstring path = std::wstring(Windows::Storage::ApplicationData::Current().LocalFolder().Path().c_str()) +
                                 L"\\probe.log";
@@ -240,7 +407,6 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
         } catch (...) {
         }
 
-        window.Activate();
         // A dialog clips at about 7 lines on the console, so show the report in pages.
         std::vector<std::wstring> pages;
         std::string cur;

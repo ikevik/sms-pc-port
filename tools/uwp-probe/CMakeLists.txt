@@ -20,6 +20,7 @@ endif()
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
 add_executable(uwp-probe WIN32 probe.cpp stack_switch.asm)
+target_link_libraries(uwp-probe PRIVATE d3d11 dxgi)
 target_compile_features(uwp-probe PRIVATE cxx_std_17)
 target_compile_options(uwp-probe PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/permissive->)
 

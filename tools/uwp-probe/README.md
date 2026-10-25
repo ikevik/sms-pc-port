@@ -14,6 +14,12 @@ It reports, in a dialog and in `LocalState\probe.log`:
 | code running on a stack from that pool, on the UI thread and a worker | game threads run on low stacks |
 
 It also lists the free low address space and the app memory limit.
+
+A second, GPU phase runs after the window is activated: it creates a D3D11 device, a 3840x2160 swap
+chain and about 512 MiB of render-target textures, maps a staging texture and a dynamic buffer (and says
+whether the CPU pointers are below 4 GiB), then repeats the low-address survey and a fresh low pool plus
+stack, and surveys again after releasing everything. This answers whether the GPU stack takes the low
+address space the port needs.
 It does not exercise the TEB stack-bounds fix-up the Windows port does.
 
 Two variants are built. The port's Windows build links at `0x400000` with ASLR off, but UWP's
