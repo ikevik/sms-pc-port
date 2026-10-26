@@ -119,6 +119,10 @@ if ($Uwp -and (Test-Path "$Build\sms.exe")) {
     New-Item -ItemType Directory -Force "$layout\Assets" | Out-Null
     Copy-Item "$Build\sms.exe" $layout
     Copy-Item tools\uwp-probe\Assets\*.png "$layout\Assets"
+    # ANGLE (third_party/angle-uwp) and the D3D compiler its Direct3D backend needs, next to sms.exe
+    Copy-Item third_party\angle-uwp\bin\*.dll $layout
+    $d3dc = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\Redist\D3D\x64\d3dcompiler_47.dll' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($d3dc) { Copy-Item $d3dc.FullName $layout } else { Write-Host 'd3dcompiler_47.dll not found in the SDK redistributables' }
     # A version that rises with every build, so installing over the previous one keeps LocalState (the
     # 1.4 GB disc image). Parts are 16-bit: day of year and minute of day.
     $ver = "1.0.$((Get-Date).DayOfYear).$([int](Get-Date).TimeOfDay.TotalMinutes)"

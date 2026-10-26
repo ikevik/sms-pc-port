@@ -31,6 +31,7 @@ using namespace Windows::UI::Core;
 
 int sms_game_main(int argc, char** argv);
 extern "C" unsigned int VIGetRetraceCount(void);  // platform/vi/vi.cpp
+extern "C" int GXPC_UwpAttachWindow(void* coreWindow);       // platform/gx/src/gx_uwp_egl.cpp
 
 namespace {
 
@@ -81,6 +82,11 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
                 break;
             }
         }
+        // ANGLE's window surface has to be made here, on the UI thread that owns the CoreWindow; the renderer takes
+        // the context over on the game's GL thread later.
+        const int attached = GXPC_UwpAttachWindow(winrt::get_abi(window));
+        fprintf(stderr, "[uwp] ANGLE window context: %s\n", attached ? "ready" : "not created (see above)");
+
         g_args.push_back("sms");
         std::ifstream args(dir + "\\args.txt");
         for (std::string line; std::getline(args, line);) {

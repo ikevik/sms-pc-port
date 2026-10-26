@@ -49,6 +49,9 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #endif
+#ifdef SMS_GX_UWP_ANGLE
+#include "gx_uwp_egl.h"
+#endif
 #ifdef SMS_GX_HAVE_VULKAN
 #include "vk/glvk.h"
 #ifdef SMS_GX_HAVE_SDL2
@@ -69,7 +72,7 @@ extern double g_presentSeconds, g_swapSeconds;
 using namespace gx;
 
 namespace {
-enum Mode { MODE_NONE, MODE_WINDOW, MODE_HEADLESS, MODE_EXTERNAL };
+enum Mode { MODE_NONE, MODE_WINDOW, MODE_HEADLESS, MODE_EXTERNAL, MODE_UWP };
 Mode s_mode = MODE_NONE;
 int s_forceHeadless = -1;  // -1: decide from the environment
 bool s_autoPresent = true;
@@ -874,6 +877,30 @@ bool openHeadless(float scale) {
 }
 #endif
 
+#ifdef SMS_GX_UWP_ANGLE
+// The UWP build: the ES context ANGLE made on the CoreWindow (GXPC_UwpAttachWindow, on the UI thread) moves to the GL thread,
+// as openHeadless does with its context.
+bool openUwp(float scale) {
+    if (!uwp::available()) {
+        logmsg("UWP: no ANGLE window context (GXPC_UwpAttachWindow made none)");
+        return false;
+    }
+    if (!uwp::makeCurrent()) {
+        logmsg("UWP: the ANGLE context cannot be made current");
+        return false;
+    }
+    const bool ok = GXPC_Init(uwp::getProc, scale) != 0;
+    uwp::releaseCurrent();
+    if (!ok) {
+        logmsg("UWP: the renderer could not start on OpenGL ES 3.0 (entry points or framebuffer: see above)");
+        return false;
+    }
+    if (glt::start([](void*) { uwp::makeCurrent(); }, nullptr)) glt::installProxies();
+    else uwp::makeCurrent();
+    return true;
+}
+#endif
+
 #ifdef SMS_GX_HAVE_VULKAN
 bool openHeadlessVulkan(float scale) {
     glvk::InitInfo vi;
@@ -1210,7 +1237,7 @@ void GXPC_SettingsMenuOpen(int open) {
     if (open) GXPC_SavePipelineCacheSoon();
 }
 int GXPC_SettingsMenuIsOpen(void) { return s_settingsMenuOpen ? 1 : 0; }
-int GXPC_IsHeadless(void) { return s_mode != MODE_WINDOW; }
+int GXPC_IsHeadless(void) { return s_mode != MODE_WINDOW && s_mode != MODE_UWP; }
 uint32_t GXPC_FrameCount(void) { return s_frame; }
 
 int GXPC_InitAuto(float efbScale) {
@@ -1231,6 +1258,16 @@ int GXPC_InitAuto(float efbScale) {
     // findDesktop for a session that lost DISPLAY / WAYLAND_DISPLAY).
     else headless = false;
     g_displayCopyHook = onDisplayCopy;
+#ifdef SMS_GX_UWP_ANGLE
+    // UWP has no SDL2 window and no desktop OpenGL: ANGLE's OpenGL ES on the CoreWindow, or nothing.
+    if (openUwp(efbScale)) {
+        s_mode = MODE_UWP;
+        logmsg("UWP: OpenGL ES renderer ready");
+        return 1;
+    }
+    logmsg("UWP: no OpenGL ES renderer; rendering is disabled");
+    return 0;
+#endif
 #ifdef SMS_GX_HAVE_SDL2
     if (!headless) {
         if (openWindowAnyBackend(efbScale)) {
@@ -1347,6 +1384,19 @@ void GXPC_Present(const void* xfb) {
     }
 #else
     (void)xfb;
+#endif
+#ifdef SMS_GX_UWP_ANGLE
+    if (s_mode == MODE_UWP) {
+        int w = 0, h = 0;
+        uwp::surfaceSize(&w, &h);
+        // on the GL thread, after what the frame queued: the picture, then the swap (which waits for vertical sync)
+        glt::sync([&] {
+            GXPC_PresentXFB(xfb, w, h);
+            GXPC_OverlayDraw(w, h);
+            uwp::swap();
+        });
+        GXPC_EndPresent();
+    }
 #endif
 #ifdef SMS_GX_HAVE_VULKAN
     // headless: no window to show, but the frame's commands are submitted
