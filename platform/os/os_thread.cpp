@@ -189,7 +189,14 @@ LowStack* low_stack()
 void* windows_host_entry(void* argument)
 {
 	LowStack* stack = (LowStack*)argument;
-	return port_win64_stack_call(stack->base, kLowStackSize, host_entry, stack->argument);
+#ifdef SMS_UWP
+	port_log("[os] host thread %p starts on the low stack at %p\n", (void*)pthread_self(), stack->base);
+#endif
+	void* result = port_win64_stack_call(stack->base, kLowStackSize, host_entry, stack->argument);
+#ifdef SMS_UWP
+	port_log("[os] host thread %p is back on its own stack and ends\n", (void*)pthread_self());
+#endif
+	return result;
 }
 #endif
 #endif
@@ -677,6 +684,9 @@ extern "C" int OSCreateThread(OSThread* t, void* (*func)(void*), void* param, vo
 	h->arg       = param;
 	h->started   = false;
 	h->cancelled = false;
+#ifdef SMS_UWP
+	port_log("[os] OSCreateThread %p: entry %p, priority %d\n", (void*)t, (void*)(uintptr_t)func, (int)prio);
+#endif
 	return TRUE;
 }
 
@@ -685,6 +695,9 @@ extern "C" void OSExitThread(OSThread* valArg)
 {
 	void* val      = valArg;
 	OSThread* self = g_cur;
+#ifdef SMS_UWP
+	port_log("[os] OSExitThread %p\n", (void*)self);
+#endif
 	self->val      = val;
 	self->state    = OS_THREAD_STATE_MORIBUND;
 	OSWakeupThread(&self->queueJoin);
@@ -703,6 +716,9 @@ extern "C" void OSExitThread(OSThread* valArg)
 
 extern "C" void OSCancelThread(OSThread* t)
 {
+#ifdef SMS_UWP
+	port_log("[os] OSCancelThread %p (running %p)\n", (void*)t, (void*)g_cur);
+#endif
 	if (t == g_cur) {
 		OSExitThread(NULL);
 		return;

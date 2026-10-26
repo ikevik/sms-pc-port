@@ -288,7 +288,15 @@ struct StreamBuffer {
     }
 };
 static StreamBuffer s_stream;
+#ifdef SMS_GX_UWP_ANGLE
+// ANGLE's Direct3D 11 backend keeps a copy of a buffer for each way it is used (vertices, indices, the CPU's writes), so
+// this one buffer costs several times its size of the app's 1 GiB: 128 + 64 MiB took 400 MiB and then more.
+static const size_t kArenaBytes = size_t(16) << 20;  // the display-list arena after the ring
+static const size_t kStreamBytes = size_t(32) << 20;
+#else
 static const size_t kArenaBytes = size_t(64) << 20;  // the display-list arena after the ring
+static const size_t kStreamBytes = size_t(128) << 20;
+#endif
 static GLint s_uboAlign = 256;
 
 // One VAO per packed vertex format: attribute pointers into the vertex stream
@@ -1470,7 +1478,7 @@ void rendererInit(float efbScale) {
     glcInvalidate();
     glGenVertexArrays(1, &s_vao);
     glcBindVertexArray(s_vao);
-    s_stream.init(128u << 20, kArenaBytes);
+    s_stream.init(kStreamBytes, kArenaBytes);
     // Values of the attributes a packed format leaves out (see vaoForFormat):
     // the same defaults the loader used to write into every vertex.
     glVertexAttrib4f(1, 0.0f, 0.0f, 1.0f, 1.0f);  // normal

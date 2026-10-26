@@ -19,7 +19,7 @@ namespace {
 // The log is the game's stderr (a file in LocalState, opened by uwp_main.cpp). A crash report writes to its handle
 // directly: the C runtime's stream may be locked by the thread that faulted.
 HANDLE s_logHandle;
-volatile LONG s_faultReports = 12;
+volatile LONG s_faultReports = 30;
 volatile LONG s_throwReports = 3;
 volatile LONG s_reporting;
 
@@ -143,7 +143,12 @@ LONG CALLBACK onException(PEXCEPTION_POINTERS exception)
     if (code == 0xE06D7363) {  // a C++ throw: usually caught, so only the first few are worth a line
         if (InterlockedDecrement(&s_throwReports) >= 0)
             report(exception, "C++ throw");
-    } else if ((code & 0xC0000000) == 0xC0000000 || code == 0x80000001) {  // faults, guard page, stack overflow, heap corruption
+    } else if (code == 0x40010006 || code == 0x4001000A || code == 0x406D1388 || code == 0x80000004 || code == 0x40010005 ||
+               code == 0xE0434352) {
+        // debug-print, thread-naming, single-step and control-C exceptions: routine, not reported
+    } else if ((code & 0xC0000000) == 0xC0000000 || (code & 0xC0000000) == 0x80000000 || code >= 0xE0000000) {
+        // faults, guard page, stack overflow, heap corruption, and the breakpoint (0x80000003) that ends a process without a
+        // debugger: anything with a warning or error severity
         if (InterlockedDecrement(&s_faultReports) >= 0)
             report(exception, "fault");
     }

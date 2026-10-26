@@ -148,7 +148,35 @@ static const char* const kExtensionFirst[] = {"glDrawElementsBaseVertex", "glMul
                                               "glDebugMessageControl", "glDebugMessageInsert", "glGetDebugMessageLog",
                                               "glPushDebugGroup", "glPopDebugGroup", "glObjectLabel"};
 
+// Calls ES 3.0 has no counterpart for, which only raised errors (the log's glDisable 0x0BF2, glPointSize and the sampler's LOD
+// bias): the logic op has no ES 3.0 form (ANGLE_logic_op is not in the context's extensions), glPointSize is ES 1, and ES 3.0
+// samplers have no LOD bias.
+static void (*s_glEnable)(unsigned);
+static void (*s_glDisable)(unsigned);
+static void (*s_glSamplerParameterf)(unsigned, unsigned, float);
+static void enableCap(unsigned cap) { if (cap != 0x0BF2 /* GL_COLOR_LOGIC_OP */) s_glEnable(cap); }
+static void disableCap(unsigned cap) { if (cap != 0x0BF2) s_glDisable(cap); }
+static void ignoreLogicOp(unsigned) {}
+static void ignorePointSize(float) {}
+static void samplerParameterf(unsigned sampler, unsigned pname, float value) {
+    if (pname != 0x84FD /* GL_TEXTURE_LOD_BIAS */) s_glSamplerParameterf(sampler, pname, value);
+}
+
 void* getProc(const char* name) {
+    if (!strcmp(name, "glEnable")) {
+        s_glEnable = reinterpret_cast<void (*)(unsigned)>(eglGetProcAddress("glEnable"));
+        return s_glEnable ? reinterpret_cast<void*>(&enableCap) : nullptr;
+    }
+    if (!strcmp(name, "glDisable")) {
+        s_glDisable = reinterpret_cast<void (*)(unsigned)>(eglGetProcAddress("glDisable"));
+        return s_glDisable ? reinterpret_cast<void*>(&disableCap) : nullptr;
+    }
+    if (!strcmp(name, "glSamplerParameterf")) {
+        s_glSamplerParameterf = reinterpret_cast<void (*)(unsigned, unsigned, float)>(eglGetProcAddress("glSamplerParameterf"));
+        return s_glSamplerParameterf ? reinterpret_cast<void*>(&samplerParameterf) : nullptr;
+    }
+    if (!strcmp(name, "glLogicOp")) return reinterpret_cast<void*>(&ignoreLogicOp);
+    if (!strcmp(name, "glPointSize")) return reinterpret_cast<void*>(&ignorePointSize);
     for (const char* extFirst : kExtensionFirst) {
         if (strcmp(name, extFirst)) continue;
         for (const char* suffix : {"EXT", "OES", "KHR"}) {
