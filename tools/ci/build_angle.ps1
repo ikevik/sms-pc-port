@@ -115,6 +115,9 @@ is_component_build = false
 is_clang = false
 use_custom_libcxx = false
 symbol_level = 0
+# The winuwp toolchain does not define the Windows version, and the SDK headers then drop declarations
+# (FILE_INFO_BY_HANDLE_CLASS) and WRL refuses to compile. Windows 10:
+extra_cflags = "/D_WIN32_WINNT=0x0A00 /DWINVER=0x0A00 /DNTDDI_VERSION=0x0A000000"
 '@ | Set-Content -Encoding ascii out\uwp\args.gn
 Say 'gn gen'
 gn gen out\uwp 2>&1 | Tee-Object "$out\gn.log" | Out-Host
