@@ -1,8 +1,11 @@
 # Manual job: build ANGLE (OpenGL ES over Direct3D 11) for UWP x64.
 # Create a pipeline from this file and run it by hand. The angle-uwp artifact holds bin/ (libEGL.dll,
 # libGLESv2.dll, d3dcompiler_47.dll), lib/ (import libraries), include/ (EGL, GLES2, GLES3, KHR),
-# ANGLE_REF.txt, RESULT.txt and the logs. A hosted job stops at 60 minutes; if the build is cut short
-# RESULT.txt says so, and the logs show how far it got.
+# ANGLE_REF.txt, RESULT.txt and the logs.
+#
+# The checkout and the build take more than a hosted job's 60 minutes, so D:\angle (the checkout and
+# its out\uwp) is cached between runs. Each run restores the newest cache for the ref, builds for about
+# 35 minutes and saves what it has; run the pipeline again until RESULT.txt says COMPLETE.
 trigger: none
 pr: none
 
@@ -22,7 +25,15 @@ jobs:
   - checkout: self
     fetchDepth: 1
 
-  - powershell: ./tools/ci/build_angle.ps1 -Ref '${{ parameters.angleRef }}'
+  - task: Cache@2
+    displayName: Restore ANGLE's checkout and build output
+    inputs:
+      key: 'angle | "$(Agent.OS)" | ${{ parameters.angleRef }} | $(Build.BuildId)'
+      restoreKeys: |
+        angle | "$(Agent.OS)" | ${{ parameters.angleRef }}
+      path: D:\angle
+
+  - powershell: ./tools/ci/build_angle.ps1 -Ref '${{ parameters.angleRef }}' -TimeoutMin 35
     displayName: Fetch and build ANGLE
     continueOnError: true
 
