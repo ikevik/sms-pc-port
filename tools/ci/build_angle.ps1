@@ -113,6 +113,7 @@ target_cpu = "x64"
 is_debug = false
 is_component_build = false
 is_clang = false
+use_custom_libcxx = false
 symbol_level = 0
 '@ | Set-Content -Encoding ascii out\uwp\args.gn
 Say 'gn gen'
@@ -124,7 +125,7 @@ $progress = ''
 if ($gnOk) {
   Say 'autoninja libEGL libGLESv2'
   $left = [int]($deadline - (Get-Date)).TotalMilliseconds
-  $p = Start-Process autoninja.bat -ArgumentList @('-C', 'out\uwp', 'libEGL', 'libGLESv2') -NoNewWindow -PassThru `
+  $p = Start-Process autoninja.bat -ArgumentList @('-k', '0', '-C', 'out\uwp', 'libEGL', 'libGLESv2')   # -k 0: report every failing step, not just the first -NoNewWindow -PassThru `
     -RedirectStandardOutput "$out\ninja.log" -RedirectStandardError "$out\ninja.err.log"
   if (-not $p.WaitForExit($left)) {
     taskkill /PID $p.Id /T /F | Out-Null
