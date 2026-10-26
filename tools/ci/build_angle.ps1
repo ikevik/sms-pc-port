@@ -125,6 +125,24 @@ if ($newest) {
 }
 $ddkLog | Tee-Object "$out\ntddi.log" | Out-Host
 
+# One source file clang accepts and MSVC does not: validationEGL.cpp copies a ScopedSyncDestroy, which is
+# NonCopyable and has no move constructor (MSVC error C2280). Give it a move constructor.
+$srcLog = @()
+$syncH = "$tree\src\libANGLE\EGLSync.h"
+if (Test-Path $syncH) {
+  $t = [IO.File]::ReadAllText($syncH)
+  $needle = 'ScopedSyncDestroy(ThreadSafeDisplay *display, Sync *sync) : mDisplay(display), mSync(sync) {}'
+  if ($t.Contains($needle) -and -not $t.Contains('ScopedSyncDestroy &&other')) {
+    $t = $t.Replace($needle, $needle + "`n`n    // added by the sms-pc-port build: MSVC needs a move constructor where clang elides the copy`n" +
+      '    ScopedSyncDestroy(ScopedSyncDestroy &&other) : mDisplay(other.mDisplay), mSync(other.release()) {}')
+    [IO.File]::WriteAllText($syncH, $t, (New-Object Text.UTF8Encoding($false)))
+    $srcLog += 'EGLSync.h: added ScopedSyncDestroy(ScopedSyncDestroy &&)'
+  } else {
+    $srcLog += 'EGLSync.h: ScopedSyncDestroy line not found or already patched'
+  }
+}
+$srcLog | Tee-Object "$out\src-patch.log" | Out-Host
+
 # UWP disables D3D9, desktop GL and Vulkan itself (gni/angle.gni); only the D3D11 backend remains.
 New-Item -ItemType Directory -Force out\uwp | Out-Null
 @'
