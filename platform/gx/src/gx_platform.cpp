@@ -889,6 +889,7 @@ bool openUwp(float scale) {
         logmsg("UWP: the ANGLE context cannot be made current");
         return false;
     }
+    uwp::enableGlDebug();
     const bool ok = GXPC_Init(uwp::getProc, scale) != 0;
     uwp::releaseCurrent();
     if (!ok) {

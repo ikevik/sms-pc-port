@@ -18,8 +18,11 @@
 #include <EGL/eglext_angle.h>
 
 #include <string.h>
+#include <functional>
 #include <string>
 #include <vector>
+
+extern "C" void port_uwp_backtrace_text(char* out, size_t size, int skip, int count);  // src/win_posix/uwp_stubs.cpp
 
 namespace {
 
@@ -31,6 +34,23 @@ EGLSurface s_surf = EGL_NO_SURFACE;
 // ANGLE's own messages (EGL_KHR_debug) into the log.
 void EGLAPIENTRY onEglMessage(EGLenum error, const char* command, EGLint type, EGLLabelKHR, EGLLabelKHR, const char* message) {
     gx::logmsg("[ANGLE %d, 0x%X] %s: %s", (int)type, (unsigned)error, command ? command : "?", message ? message : "");
+}
+
+// GL_KHR_debug messages (ANGLE says which call it rejected and why) with the caller's stack: offsets in sms.exe, which
+// the link map (sms.map, with the build's artifact) turns into names. One line for each distinct message, a limited
+// number of them: the same ones come every frame.
+void onGlMessage(unsigned source, unsigned type, unsigned id, unsigned severity, int length, const char* message, const void*) {
+    static size_t seen[96];
+    static int nseen = 0;
+    const std::string text(message ? message : "", message ? (length > 0 ? (size_t)length : strlen(message)) : 0);
+    const size_t key = std::hash<std::string>()(text);
+    for (int i = 0; i < nseen; i++)
+        if (seen[i] == key) return;
+    if (nseen >= 96) return;
+    seen[nseen++] = key;
+    char stack[900];
+    port_uwp_backtrace_text(stack, sizeof stack, 1, 12);
+    gx::logmsg("[GL 0x%X/0x%X id %u sev 0x%X] %s\n    at %s", source, type, id, severity, text.c_str(), stack);
 }
 
 }  // namespace
@@ -105,6 +125,16 @@ void pumpInput() {
 }
 int rumble(unsigned short strength) { return s_rumble ? s_rumble(strength) : 0; }
 
+// The context's extensions (glGetString, read once in enableGlDebug): ANGLE hands out entry points for extensions the
+// Direct3D 11 backend does not have, and a call to one raises GL_INVALID_OPERATION instead of failing to load.
+static std::string s_extensions;
+static bool s_baseVertex = false;
+static bool hasExtension(const char* name) {
+    const std::string list = " " + s_extensions + " ";
+    return list.find(std::string(" ") + name + " ") != std::string::npos;
+}
+bool nativeBaseVertex() { return s_baseVertex; }
+
 // Desktop GL takes doubles where ES has float versions under other names.
 static void (*s_clearDepthf)(float);
 static void (*s_depthRangef)(float, float);
@@ -112,6 +142,7 @@ static void clearDepthDouble(double d) { s_clearDepthf((float)d); }
 static void depthRangeDouble(double n, double f) { s_depthRangef((float)n, (float)f); }
 
 void* getProc(const char* name) {
+    if (!strcmp(name, "glBufferStorage") && !hasExtension("GL_EXT_buffer_storage")) return nullptr;  // the renderer then streams through plain buffers
     if (!strcmp(name, "glClearDepth")) {
         s_clearDepthf = reinterpret_cast<void (*)(float)>(eglGetProcAddress("glClearDepthf"));
         return s_clearDepthf ? reinterpret_cast<void*>(&clearDepthDouble) : nullptr;
@@ -126,6 +157,29 @@ void* getProc(const char* name) {
         if (void* p = reinterpret_cast<void*>(eglGetProcAddress(alt.c_str()))) return p;
     }
     return nullptr;
+}
+
+void enableGlDebug() {
+    typedef void (*DebugProc)(unsigned, unsigned, unsigned, unsigned, int, const char*, const void*);
+    auto callback = reinterpret_cast<void (*)(DebugProc, const void*)>(getProc("glDebugMessageCallback"));
+    auto control = reinterpret_cast<void (*)(unsigned, unsigned, unsigned, int, const unsigned*, unsigned char)>(
+        getProc("glDebugMessageControl"));
+    auto enable = reinterpret_cast<void (*)(unsigned)>(getProc("glEnable"));
+    if (!callback || !enable) {
+        logmsg("UWP: GL_KHR_debug is not available (callback %p)", reinterpret_cast<void*>(callback));
+        return;
+    }
+    if (auto getString = reinterpret_cast<const unsigned char* (*)(unsigned)>(getProc("glGetString"))) {
+        if (const unsigned char* e = getString(0x1F03 /* GL_EXTENSIONS */)) s_extensions = reinterpret_cast<const char*>(e);
+    }
+    s_baseVertex = hasExtension("GL_EXT_draw_elements_base_vertex") || hasExtension("GL_OES_draw_elements_base_vertex");
+    logmsg("UWP: extensions: %s", s_extensions.c_str());
+    logmsg("UWP: base vertex draws are %s", s_baseVertex ? "native" : "emulated (attribute offsets)");
+    callback(onGlMessage, nullptr);
+    if (control) control(0x1100 /* GL_DONT_CARE */, 0x1100, 0x1100, 0, nullptr, 1);
+    enable(0x92E0);  // GL_DEBUG_OUTPUT
+    enable(0x8242);  // GL_DEBUG_OUTPUT_SYNCHRONOUS: the callback runs inside the call that failed
+    logmsg("UWP: GL debug messages on");
 }
 
 bool makeCurrent() { return eglMakeCurrent(s_dpy, s_surf, s_surf, s_ctx) == EGL_TRUE; }

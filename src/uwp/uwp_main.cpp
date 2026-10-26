@@ -10,6 +10,7 @@
 // so this shows what the game's code does on the console before any of those exist.
 #include <windows.h>
 
+#include <winrt/Windows.ApplicationModel.h>
 #include <winrt/Windows.ApplicationModel.Core.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Storage.h>
@@ -60,10 +61,26 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
     CoreWindow window{nullptr};
 
     IFrameworkView CreateView() { return *this; }
-    void Initialize(CoreApplicationView const&) {}
+    // What the system does to the app goes in the log: a process that is suspended and then ended leaves no other trace.
+    void Initialize(CoreApplicationView const&)
+    {
+        CoreApplication::Suspending([](auto&&, auto&&) { fprintf(stderr, "[uwp] the system is suspending the app\n"); });
+        CoreApplication::Resuming([](auto&&, auto&&) { fprintf(stderr, "[uwp] the app is resuming\n"); });
+        CoreApplication::Exiting([](auto&&, auto&&) { fprintf(stderr, "[uwp] the app is exiting\n"); });
+    }
     void Load(hstring const&) {}
-    void Uninitialize() {}
-    void SetWindow(CoreWindow const& w) { window = w; }
+    void Uninitialize() { fprintf(stderr, "[uwp] the view is uninitialized\n"); }
+    void SetWindow(CoreWindow const& w)
+    {
+        window = w;
+        w.Closed([](auto&&, auto&&) { fprintf(stderr, "[uwp] the window was closed\n"); });
+        w.VisibilityChanged([](auto&&, VisibilityChangedEventArgs const& a) {
+            fprintf(stderr, "[uwp] the window is %s\n", a.Visible() ? "visible" : "hidden");
+        });
+        w.Activated([](auto&&, WindowActivatedEventArgs const& a) {
+            fprintf(stderr, "[uwp] window activation state %d\n", (int)a.WindowActivationState());
+        });
+    }
 
     void Run()
     {
@@ -76,6 +93,9 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
         freopen_s(&log, (dir + "\\sms.out.log").c_str(), "w", stdout);
         setvbuf(stderr, nullptr, _IONBF, 0);
         fprintf(stderr, "[uwp] LocalState: %s\n[uwp] image base %p\n", dir.c_str(), (void*)GetModuleHandleW(nullptr));
+        // exit() from anywhere in the game says so here; a process that ends without this line was ended by a fault or by
+        // the system.
+        atexit([] { fprintf(stderr, "[uwp] exit() was called\n"); });
 
         for (const char* name : {"game.iso", "game.gcm", "game.ciso"}) {
             if (exists(dir + "\\" + name)) {

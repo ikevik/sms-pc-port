@@ -11,6 +11,10 @@ namespace uwp {
 bool available();
 // GL entry points by name (eglGetProcAddress, retrying with the EXT, OES and KHR suffixes ES gives some).
 void* getProc(const char* name);
+// Whether the context has glDrawElementsBaseVertex (GL_EXT/OES_draw_elements_base_vertex); known after enableGlDebug.
+bool nativeBaseVertex();
+// Log what ANGLE says about rejected GL calls (GL_KHR_debug), with the caller's stack. Needs the context current.
+void enableGlDebug();
 // Make the context current on the calling thread / release it there.
 bool makeCurrent();
 void releaseCurrent();

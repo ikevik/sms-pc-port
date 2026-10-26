@@ -296,6 +296,25 @@ static GLint s_uboAlign = 256;
 // set in rendererInit (matrix indices: set per batch in flushBatch).
 static std::unordered_map<uint32_t, GLuint> s_fmtVaos;
 
+#ifdef SMS_GX_UWP_ANGLE
+// OpenGL ES 3.0 has no base-vertex draws (an extension ANGLE's Direct3D 11 backend may lack): where the context cannot do
+// them, a draw with a base vertex moves the attribute pointers of its VAO by base * stride instead. The attributes of
+// each VAO made here are kept for that.
+struct VaoAttr {
+    GLuint index;
+    GLint n;
+    GLenum type;
+    GLboolean norm;
+    size_t off;
+    bool integer;
+};
+struct VaoShape {
+    GLsizei stride = 0;
+    std::vector<VaoAttr> attrs;
+};
+static std::unordered_map<GLuint, VaoShape> s_vaoShapes;
+#endif
+
 static GLuint makeVao(uint32_t fmt, GLuint buf) {
     GLuint vao;
     const VtxFmtLayout& l = vtxFmtLayout(fmt);
@@ -305,10 +324,17 @@ static GLuint makeVao(uint32_t fmt, GLuint buf) {
     glcBindArrayBuffer(buf);
     const GLsizei st = l.stride;
     auto off = [](size_t o) { return reinterpret_cast<const void*>(o); };
+#ifdef SMS_GX_UWP_ANGLE
+    VaoShape& shape = s_vaoShapes[vao];
+    shape.stride = st;
+#endif
     auto attr = [&](GLuint i, bool on, GLint n, GLenum type, GLboolean norm, size_t o) {
         if (!on) return;
         glVertexAttribPointer(i, n, type, norm, st, off(o));
         glEnableVertexAttribArray(i);
+#ifdef SMS_GX_UWP_ANGLE
+        shape.attrs.push_back(VaoAttr{i, n, type, norm, o, false});
+#endif
     };
     attr(0, true, 3, GL_FLOAT, GL_FALSE, 0);
     attr(1, fmt & VF_NRM, 3, GL_FLOAT, GL_FALSE, l.nrm);
@@ -320,8 +346,33 @@ static GLuint makeVao(uint32_t fmt, GLuint buf) {
     if (fmt & VF_MTX) {
         glVertexAttribIPointer(14, 3, GL_UNSIGNED_INT, st, off(l.mtx));
         glEnableVertexAttribArray(14);
+#ifdef SMS_GX_UWP_ANGLE
+        shape.attrs.push_back(VaoAttr{14, 3, GL_UNSIGNED_INT, GL_FALSE, l.mtx, true});
+#endif
     }
     return vao;
+}
+
+// glDrawElementsBaseVertex for the indices at byte offset `iOff` of the element buffer (GL_UNSIGNED_INT), with `vao` bound.
+static void drawElementsBase(GLuint vao, GLenum mode, GLsizei count, size_t iOff, GLint base) {
+#ifdef SMS_GX_UWP_ANGLE
+    if (!gx::uwp::nativeBaseVertex()) {
+        const VaoShape& shape = s_vaoShapes[vao];
+        auto point = [&](GLint vertexBase) {
+            glcBindArrayBuffer(s_stream.buf);  // the pointers take the array buffer bound now
+            for (const VaoAttr& a : shape.attrs) {
+                const void* at = reinterpret_cast<const void*>(a.off + size_t(vertexBase) * size_t(shape.stride));
+                if (a.integer) glVertexAttribIPointer(a.index, a.n, a.type, shape.stride, at);
+                else glVertexAttribPointer(a.index, a.n, a.type, a.norm, shape.stride, at);
+            }
+        };
+        if (base) point(base);
+        glDrawElements(mode, count, GL_UNSIGNED_INT, reinterpret_cast<const void*>(iOff));
+        if (base) point(0);  // the VAO's other draws expect its pointers at the start
+        return;
+    }
+#endif
+    glDrawElementsBaseVertex(mode, count, GL_UNSIGNED_INT, reinterpret_cast<const void*>(iOff), base);
 }
 
 static GLuint vaoForFormat(uint32_t fmt) {
@@ -2458,16 +2509,16 @@ void flushBatch() {
         for (const Range& r : ranges) {
             glcBindVertexArray(r.vao);
             for (size_t i = 0; i < size_t(r.count); i += step) {
-                const void* indices = reinterpret_cast<const void*>(r.iOff + i * 4);
+                const size_t indices = r.iOff + i * 4;
                 glcUseProgram(sp->prog);
                 glColorMask(masks[0], masks[1], masks[2], masks[3]);
                 glDepthMask(GL_FALSE);
-                glDrawElementsBaseVertex(mode, GLsizei(step), GL_UNSIGNED_INT, indices, r.base);
+                drawElementsBase(r.vao, mode, GLsizei(step), indices, r.base);
                 pixMetricPause();
                 glcUseProgram(depthSp->prog);
                 glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
                 glDepthMask(GL_TRUE);
-                glDrawElementsBaseVertex(mode, GLsizei(step), GL_UNSIGNED_INT, indices, r.base);
+                drawElementsBase(r.vao, mode, GLsizei(step), indices, r.base);
                 pixMetricResume();
             }
         }
@@ -2483,9 +2534,14 @@ void flushBatch() {
             while (j < ranges.size() && ranges[j].vao == ranges[i].vao) j++;
             glcBindVertexArray(ranges[i].vao);
             if (j == i + 1) {
-                glDrawElementsBaseVertex(mode, ranges[i].count, GL_UNSIGNED_INT,
-                                         reinterpret_cast<const void*>(ranges[i].iOff), ranges[i].base);
-            } else {
+                drawElementsBase(ranges[i].vao, mode, ranges[i].count, ranges[i].iOff, ranges[i].base);
+            }
+#ifdef SMS_GX_UWP_ANGLE
+            else if (!gx::uwp::nativeBaseVertex()) {
+                for (size_t k = i; k < j; k++) drawElementsBase(ranges[k].vao, mode, ranges[k].count, ranges[k].iOff, ranges[k].base);
+            }
+#endif
+            else {
                 counts.clear();
                 offsets.clear();
                 bases.clear();
@@ -3688,6 +3744,34 @@ void frameProbe(int w, int h, unsigned frame, int presented) {
             len += snprintf(line + len, sizeof line - size_t(len), " %02x%02x%02x", px[0], px[1], px[2]);
         }
     logmsg("%s", line);
+    logmsg("[ES] frame %u: the game's last display frame drew %u batches, %u vertices, %u texture uploads, %u EFB copies", frame,
+           s_lastFrameStats.draws, s_lastFrameStats.vertices, s_lastFrameStats.textureUploads, s_lastFrameStats.efbCopies);
+    // the same points in the picture handed to the present (the XFB's texture) and in the EFB's colour texture: black
+    // here and not in the XFB means the present's draw is the fault; black in the XFB means the game's own drawing (or
+    // the copy into the XFB) is
+    auto sample = [&](const char* what, GLuint tex, int tw, int th) {
+        if (!tex || tw <= 0 || th <= 0) return;
+        glBindFramebuffer(GL_FRAMEBUFFER, s_tmpFbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+        const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        int n = snprintf(line, sizeof line, "[ES] frame %u: %s %dx%d (framebuffer 0x%X):", frame, what, tw, th, (unsigned)status);
+        if (status == GL_FRAMEBUFFER_COMPLETE)
+            for (int row = 0; row < 3; row++)
+                for (int col = 0; col < 5; col++) {
+                    unsigned char px[4] = {0, 0, 0, 0};
+                    glReadPixels((tw - 1) * (col + 1) / 6, (th - 1) * (row + 1) / 4, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+                    n += snprintf(line + n, sizeof line - size_t(n), " %02x%02x%02x", px[0], px[1], px[2]);
+                }
+        logmsg("%s", line);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    };
+    auto it = s_xfbs.find(s_lastXfb);
+    if (it != s_xfbs.end()) sample("XFB texture", it->second.tex, it->second.w, it->second.h);
+    else logmsg("[ES] frame %u: no XFB registered for the last picture", frame);
+    sample("EFB colour", s_efbColor, scaled(s_efbW), scaled(EFB_H));
+    for (int n = 0; n < 4; n++)
+        if (glGetError() == GL_NO_ERROR) break;
 }
 
 }  // namespace uwp

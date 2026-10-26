@@ -102,6 +102,8 @@ if ($configured) {
 if (Test-Path "$Build\sms.exe") {
   New-Item -ItemType Directory -Force "$out\bin" | Out-Null
   Copy-Item "$Build\sms.exe" "$out\bin\"
+  # the link map: symbols by RVA, for the offsets a crash or a GL error in sms.log names (sms.exe+0x...)
+  if (Test-Path "$Build\sms.map") { Copy-Item "$Build\sms.map" "$out\bin\" }
   $dll = "$sdlDir\SDL2-$sdlVer\lib\x64\SDL2.dll"
   if (Test-Path $dll) { Copy-Item $dll "$out\bin\" }
   Say "sms.exe linked: $((Get-Item "$Build\sms.exe").Length / 1MB) MB"
