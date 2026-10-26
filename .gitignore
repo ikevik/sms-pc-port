@@ -6,7 +6,8 @@
 # Output folders of earlier layouts.
 /build-*/
 /build32/
-/third_party/
+/third_party/*
+!/third_party/angle-uwp/
 .DS_Store
 # The achievement icons, downloaded by tools/mods/get.py achievement-icons.
 /assets/achievements/

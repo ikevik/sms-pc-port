@@ -1,0 +1,9 @@
+39087422740112ef2f3be57a6af1ed8399459f69
+target_os = "winuwp"
+target_cpu = "x64"
+is_debug = false
+is_component_build = false
+is_clang = false
+use_custom_libcxx = false
+symbol_level = 0
+
