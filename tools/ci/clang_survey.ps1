@@ -119,7 +119,12 @@ if ($Uwp -and (Test-Path "$Build\sms.exe")) {
     New-Item -ItemType Directory -Force "$layout\Assets" | Out-Null
     Copy-Item "$Build\sms.exe" $layout
     Copy-Item tools\uwp-probe\Assets\*.png "$layout\Assets"
-    Copy-Item tools\uwp\AppxManifest.xml.in "$layout\AppxManifest.xml"
+    # A version that rises with every build, so installing over the previous one keeps LocalState (the
+    # 1.4 GB disc image). Parts are 16-bit: day of year and minute of day.
+    $ver = "1.0.$((Get-Date).DayOfYear).$([int](Get-Date).TimeOfDay.TotalMinutes)"
+    $manifest = (Get-Content tools\uwp\AppxManifest.xml.in -Raw).Replace('Version="1.0.0.0"', "Version=`"$ver`"")
+    [IO.File]::WriteAllText("$layout\AppxManifest.xml", $manifest, (New-Object Text.UTF8Encoding($false)))
+    Write-Host "package version $ver"
     $cert = New-SelfSignedCertificate -Type Custom -Subject 'CN=SmsDev' -KeyUsage DigitalSignature `
       -CertStoreLocation Cert:\CurrentUser\My -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
     $pw = [guid]::NewGuid().ToString()

@@ -13,6 +13,7 @@
 #include <winrt/Windows.ApplicationModel.Core.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Storage.h>
+#include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Popups.h>
 
@@ -29,6 +30,7 @@ using namespace Windows::ApplicationModel::Core;
 using namespace Windows::UI::Core;
 
 int sms_game_main(int argc, char** argv);
+extern "C" unsigned int VIGetRetraceCount(void);  // platform/vi/vi.cpp
 
 namespace {
 
@@ -99,6 +101,24 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
                 std::wstring text = L"The game's main returned " + std::to_wstring(rc) + L". See sms.log in the app's LocalState folder.";
                 Windows::UI::Popups::MessageDialog(text, L"sms").ShowAsync();
             });
+        }).detach();
+
+        // A heartbeat, so the log shows whether the game keeps running (its retrace count moves) and how
+        // much of the app's memory limit it uses, long after the last line the game prints.
+        std::thread([] {
+            unsigned last = VIGetRetraceCount();
+            for (int i = 1;; i++) {
+                Sleep(5000);
+                const unsigned now = VIGetRetraceCount();
+                unsigned long long usage = 0, limit = 0;
+                try {
+                    usage = Windows::System::MemoryManager::AppMemoryUsage() >> 20;
+                    limit = Windows::System::MemoryManager::AppMemoryUsageLimit() >> 20;
+                } catch (...) {
+                }
+                fprintf(stderr, "[uwp] %4d s: retrace %u (+%u), memory %llu of %llu MiB\n", i * 5, now, now - last, usage, limit);
+                last = now;
+            }
         }).detach();
 
         dispatcher.ProcessEvents(CoreProcessEventsOption::ProcessUntilQuit);
