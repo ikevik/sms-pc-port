@@ -105,6 +105,26 @@ if ($pin -and $have -and $pin -ne $have) {
   Say "Windows SDK pinned by the build files: '$pin'; newest complete installed: '$have'"
 }
 
+# The build files also set NTDDI_VERSION to a name from the newest SDK (NTDDI_WIN11_BR). An older SDK does not
+# define it, the preprocessor reads it as 0, and the headers then drop declarations (FILE_INFO_BY_HANDLE_CLASS)
+# and WRL stops with "requires NTDDI_VERSION ... NTDDI_VISTA". Use the newest NTDDI_WIN1x_ name the SDK has.
+$ddk = Get-Content "$kits\Include\$have\shared\sdkddkver.h" -Raw
+$known = @([regex]::Matches($ddk, '#define\s+(NTDDI_WIN1[01]_[A-Z0-9]+)\s') | ForEach-Object { $_.Groups[1].Value })
+$newest = $known | Select-Object -Last 1
+$ddkLog = @("SDK $have defines: $($known -join ' ')", "using $newest for names it lacks")
+if ($newest) {
+  $utf8 = New-Object Text.UTF8Encoding($false)
+  foreach ($f in Get-ChildItem "$tree\build\config" -Recurse -File -Include *.py, *.gni, *.gn -ErrorAction SilentlyContinue) {
+    $text = [IO.File]::ReadAllText($f.FullName)
+    $new = [regex]::Replace($text, 'NTDDI_WIN1[01]_[A-Z0-9]+', { param($m) if ($known -contains $m.Value) { $m.Value } else { $newest } })
+    if ($new -ne $text) {
+      [IO.File]::WriteAllText($f.FullName, $new, $utf8)
+      $ddkLog += "patched " + $f.FullName.Substring($tree.Length + 1)
+    }
+  }
+}
+$ddkLog | Tee-Object "$out\ntddi.log" | Out-Host
+
 # UWP disables D3D9, desktop GL and Vulkan itself (gni/angle.gni); only the D3D11 backend remains.
 New-Item -ItemType Directory -Force out\uwp | Out-Null
 @'
@@ -115,9 +135,6 @@ is_component_build = false
 is_clang = false
 use_custom_libcxx = false
 symbol_level = 0
-# The winuwp toolchain does not define the Windows version, and the SDK headers then drop declarations
-# (FILE_INFO_BY_HANDLE_CLASS) and WRL refuses to compile. Windows 10:
-extra_cflags = "/D_WIN32_WINNT=0x0A00 /DWINVER=0x0A00 /DNTDDI_VERSION=0x0A000000"
 '@ | Set-Content -Encoding ascii out\uwp\args.gn
 Say 'gn gen'
 gn gen out\uwp 2>&1 | Tee-Object "$out\gn.log" | Out-Host
