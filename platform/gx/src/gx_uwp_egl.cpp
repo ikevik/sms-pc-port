@@ -35,6 +35,10 @@ void EGLAPIENTRY onEglMessage(EGLenum error, const char* command, EGLint type, E
 
 }  // namespace
 
+extern "C" void GXPC_UwpSetInput(void (*poll)(void (*emit)(const void*)), int (*rumble)(unsigned short)) {
+    gx::uwp::registerInput(poll, rumble);
+}
+
 extern "C" int GXPC_UwpAttachWindow(void* coreWindow) {
     using namespace gx;
     if (s_surf != EGL_NO_SURFACE) return 1;
@@ -86,6 +90,20 @@ namespace gx {
 namespace uwp {
 
 bool available() { return s_surf != EGL_NO_SURFACE && s_ctx != EGL_NO_CONTEXT; }
+
+static void (*s_eventCb)(const void*);
+static void (*s_poll)(void (*emit)(const void*));
+static int (*s_rumble)(unsigned short);
+
+void setEventCallback(void (*cb)(const void*)) { s_eventCb = cb; }
+void registerInput(void (*poll)(void (*emit)(const void*)), int (*rumble)(unsigned short)) {
+    s_poll = poll;
+    s_rumble = rumble;
+}
+void pumpInput() {
+    if (s_poll && s_eventCb) s_poll(s_eventCb);
+}
+int rumble(unsigned short strength) { return s_rumble ? s_rumble(strength) : 0; }
 
 // Desktop GL takes doubles where ES has float versions under other names.
 static void (*s_clearDepthf)(float);

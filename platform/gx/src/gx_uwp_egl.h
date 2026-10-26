@@ -23,6 +23,13 @@ void swap();
 // glBindFragDataLocation).
 std::string toEs300(const char* src);
 
+// The controller, supplied by the app (src/uwp/uwp_input.cpp) as SDL-style controller events: pad.cpp registers its event
+// handler through sms_gx_set_event_callback, and every pad read pumps the poll.
+void setEventCallback(void (*cb)(const void* sdlEvent));
+void registerInput(void (*poll)(void (*emit)(const void*)), int (*rumble)(unsigned short));
+void pumpInput();
+int rumble(unsigned short strength);  // 1 if a controller took it
+
 }  // namespace uwp
 }  // namespace gx
 
@@ -30,3 +37,5 @@ std::string toEs300(const char* src);
 // from its own thread, and ANGLE reads its size and subscribes to its events when the surface is made. Returns 1 if
 // the window surface and context exist.
 extern "C" int GXPC_UwpAttachWindow(void* coreWindow);
+// The app's controller poll (calls emit with SDL controller events) and rumble.
+extern "C" void GXPC_UwpSetInput(void (*poll)(void (*emit)(const void*)), int (*rumble)(unsigned short));

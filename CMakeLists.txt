@@ -458,9 +458,10 @@ if(SMS_MSVC_TARGET)
   target_compile_definitions(sms PRIVATE SMS_PLATFORM_UNIT=1)
   if(SMS_UWP)
     target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/uwp_stubs.cpp
-                   ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_main.cpp)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_input.cpp)
     # The WinRT entry (C++/WinRT needs C++17 or later) starts the game's main, renamed here.
-    set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_main.cpp PROPERTIES COMPILE_OPTIONS "-std=gnu++20")
+    set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_input.cpp
+                                PROPERTIES COMPILE_OPTIONS "-std=gnu++20")
     set_source_files_properties(${SMS_PORT_SRC}/port_main.cpp PROPERTIES COMPILE_DEFINITIONS "main=sms_game_main")
   endif()
 endif()

@@ -33,6 +33,7 @@ int sms_game_main(int argc, char** argv);
 extern "C" unsigned int VIGetRetraceCount(void);  // platform/vi/vi.cpp
 extern "C" unsigned int GXPC_FrameCount(void);    // platform/gx/src/gx_platform.cpp: pictures presented
 extern "C" int GXPC_UwpAttachWindow(void* coreWindow);       // platform/gx/src/gx_uwp_egl.cpp
+void sms_uwp_input_register();                           // src/uwp/uwp_input.cpp: the Xbox controller
 
 namespace {
 
@@ -86,6 +87,7 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
         // ANGLE's window surface has to be made here, on the UI thread that owns the CoreWindow; the renderer takes
         // the context over on the game's GL thread later.
         const int attached = GXPC_UwpAttachWindow(winrt::get_abi(window));
+        sms_uwp_input_register();
         fprintf(stderr, "[uwp] ANGLE window context: %s\n", attached ? "ready" : "not created (see above)");
 
         // env.txt (optional): NAME=VALUE lines set as environment variables for the game, for trying its settings

@@ -1408,6 +1408,8 @@ void GXPC_Present(const void* xfb) {
 void sms_gx_set_event_callback(void (*cb)(const union SDL_Event*)) {
 #ifdef SMS_GX_HAVE_SDL2
     s_eventCb = cb;
+#elif defined(SMS_GX_UWP_ANGLE)
+    uwp::setEventCallback(reinterpret_cast<void (*)(const void*)>(cb));
 #else
     (void)cb;
 #endif
@@ -1449,6 +1451,9 @@ static void noteInputDevice(const SDL_Event& ev) {
 #endif
 
 void sms_gx_pump_events(void) {
+#ifdef SMS_GX_UWP_ANGLE
+    uwp::pumpInput();
+#endif
 #ifdef SMS_GX_HAVE_SDL2
     if (s_mode != MODE_WINDOW) return;
     applyWindowRequests();
@@ -1706,6 +1711,8 @@ int sms_gx_rumble(unsigned short strength) {
     s_rumble.pad = s_rumblePad;
     s_rumble.called = true;
     return s_rumblePad >= 0;
+#elif defined(SMS_GX_UWP_ANGLE)
+    return uwp::rumble(strength);
 #else
     (void)strength;
     return 0;
@@ -1722,6 +1729,8 @@ void sms_gx_rumble_shutdown(void) {
     }
     std::lock_guard<std::mutex> l(s_padLock);
     for (const Pad& p : s_pads) SDL_GameControllerRumble(p.c, 0, 0, 0);
+#elif defined(SMS_GX_UWP_ANGLE)
+    uwp::rumble(0);
 #endif
 }
 
