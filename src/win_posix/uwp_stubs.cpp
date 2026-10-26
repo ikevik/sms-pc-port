@@ -24,3 +24,7 @@ bool gc_adapter_read(GcAdapterInput*) { return false; }
 bool gc_adapter_read_second(GcAdapterInput*) { return false; }
 void gc_adapter_rumble(bool) {}
 void gc_adapter_flush_rumble() {}
+
+// The extension overlay (text panels drawn over the frame) is built with the SDL2 window code,
+// which UWP does not have yet; multiplayer and co-op call this one function directly.
+extern "C" void GXPC_ExtOverlaySet(int, const char*) {}
