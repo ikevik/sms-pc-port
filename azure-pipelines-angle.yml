@@ -17,7 +17,7 @@ parameters:
   type: string
   default: main
 - name: ninjaMinutes
-  displayName: Minutes to build before stopping (private project: 35)
+  displayName: 'Minutes to build before stopping (private project: 35)'
   type: number
   default: 35
 - name: useCache
