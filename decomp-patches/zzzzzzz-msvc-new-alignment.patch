@@ -1,0 +1,32 @@
+Reason: clang on the msvc target assumes ::operator new returns 16-aligned memory and zeroes new objects with movaps; the game's heap gave 4-aligned blocks (TMario::initModel faulted with 0x80000002 on the console). Give 16 on that target.
+--- a/libs/JSystem/src/JKernel/JKRHeap.cpp
++++ b/libs/JSystem/src/JKernel/JKRHeap.cpp
+@@ -251,10 +251,18 @@
+ {
+ 	JUT_ASSERT_F(false, "UNIMPLEMENTED");
+ }
++
++#if defined(_MSC_VER)
++// clang on the msvc target takes ::operator new to give the C++ library's 16-byte alignment and zeroes new objects'
++// fields with aligned 16-byte stores, which fault (exception 0x80000002) on the 4-aligned blocks this gives.
++#define SMS_NEW_ALIGNMENT 16
++#else
++#define SMS_NEW_ALIGNMENT 4
++#endif
+ 
+ void* operator new(size_t byteCount)
+ {
+-	return JKRHeap::alloc(byteCount, 4, nullptr);
++	return JKRHeap::alloc(byteCount, SMS_NEW_ALIGNMENT, nullptr);
+ }
+ void* operator new(size_t byteCount, int alignment)
+ {
+@@ -267,7 +275,7 @@
+ 
+ void* operator new[](size_t byteCount)
+ {
+-	return JKRHeap::alloc(byteCount, 4, nullptr);
++	return JKRHeap::alloc(byteCount, SMS_NEW_ALIGNMENT, nullptr);
+ }
+ void* operator new[](size_t byteCount, int alignment)
+ {

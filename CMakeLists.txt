@@ -177,6 +177,12 @@ endif()
 # memory stays below 4 GiB (port_low_alloc), so nothing is lost.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   list(APPEND SMS_GAME_FLAGS -fms-extensions)
+  if(SMS_MSVC_TARGET)
+    # The game's operator new (JKRHeap::alloc, 4-byte alignment) is not what clang takes the global one to be: it assumes
+    # the 16 bytes the C++ library's new gives and stores zeros into new objects with movaps, which faults on a UWP
+    # console (TMario::initModel, exception 0x80000002) when the heap hands out an address that is only 8-aligned.
+    list(APPEND SMS_GAME_FLAGS $<$<COMPILE_LANGUAGE:CXX>:-fnew-alignment=4>)
+  endif()
   # C++11 made narrowing in braces and case labels an error; the game relies on the C++03 rule.
   list(APPEND SMS_GAME_FLAGS $<$<COMPILE_LANGUAGE:CXX>:-Wno-c++11-narrowing>)
 endif()

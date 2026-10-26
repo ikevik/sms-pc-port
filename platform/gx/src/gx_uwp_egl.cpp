@@ -159,7 +159,7 @@ static void disableCap(unsigned cap) { if (cap != 0x0BF2) s_glDisable(cap); }
 static void ignoreLogicOp(unsigned) {}
 static void ignorePointSize(float) {}
 static void samplerParameterf(unsigned sampler, unsigned pname, float value) {
-    if (pname != 0x84FD /* GL_TEXTURE_LOD_BIAS */) s_glSamplerParameterf(sampler, pname, value);
+    if (pname != 0x8501 /* GL_TEXTURE_LOD_BIAS */) s_glSamplerParameterf(sampler, pname, value);
 }
 
 void* getProc(const char* name) {
