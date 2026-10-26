@@ -1,0 +1,31 @@
+# Manual job: build ANGLE (OpenGL ES over Direct3D 11) for UWP x64.
+# Create a pipeline from this file and run it by hand. The angle-uwp artifact holds bin/ (libEGL.dll,
+# libGLESv2.dll, d3dcompiler_47.dll), lib/ (import libraries), include/ (EGL, GLES2, GLES3, KHR),
+# ANGLE_REF.txt, RESULT.txt and the logs. A hosted job stops at 60 minutes; if the build is cut short
+# RESULT.txt says so, and the logs show how far it got.
+trigger: none
+pr: none
+
+parameters:
+- name: angleRef
+  displayName: ANGLE branch, tag or commit
+  type: string
+  default: main
+
+jobs:
+- job: angle_uwp
+  displayName: ANGLE for UWP x64
+  timeoutInMinutes: 60
+  pool:
+    vmImage: windows-2022
+  steps:
+  - checkout: self
+    fetchDepth: 1
+
+  - powershell: ./tools/ci/build_angle.ps1 -Ref '${{ parameters.angleRef }}'
+    displayName: Fetch and build ANGLE
+    continueOnError: true
+
+  - publish: angle-uwp
+    artifact: angle-uwp
+    condition: always()
