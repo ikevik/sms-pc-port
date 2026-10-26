@@ -168,6 +168,20 @@ struct StreamPiece {
     size_t bytes, align;
     size_t at;  // out: offset written at, a multiple of align
 };
+#ifdef SMS_GX_UWP_ANGLE
+// ANGLE's Direct3D 11 backend keeps a separate copy of a buffer for each way it is used, and copies the whole buffer between
+// them after a write. One big buffer holding vertices, indices and the uniform block (which is what a desktop driver is
+// happiest with) made the title run at 3 frames a second and take the app's whole memory in a minute (sms-16.log). Here
+// each role has a buffer of its own (the vertices are StreamBuffer::buf), and a batch replaces each one whole with
+// glBufferData, so only what the batch uses is moved.
+static GLuint s_uwpIbo = 0, s_uwpUbo = 0;
+static void uwpUpload(GLuint buf, const void* data, size_t bytes, GLenum usage) {
+    glt::postData(data, bytes, [buf, bytes, usage](const uint8_t* d) {
+        glBindBuffer(GL_COPY_WRITE_BUFFER, buf);  // a target no VAO records
+        glBufferData(GL_COPY_WRITE_BUFFER, GLsizeiptr(bytes), d, usage);
+    });
+}
+#endif
 struct StreamBuffer {
     enum { kSegments = 4 };
     GLuint buf = 0;
@@ -183,6 +197,14 @@ struct StreamBuffer {
     void init(size_t bytes, size_t extra) {
         size = bytes;
         const size_t total = bytes + extra;
+#ifdef SMS_GX_UWP_ANGLE
+        // see s_uwpIbo: each role has a buffer of its own, filled whole per batch
+        glGenBuffers(1, &buf);
+        glGenBuffers(1, &s_uwpIbo);
+        glGenBuffers(1, &s_uwpUbo);
+        (void)total;
+        return;
+#endif
         glGenBuffers(1, &buf);
         glcBindArrayBuffer(buf);
         const char* e = getenv("SMS_GX_PERSISTENT_MAP");
@@ -328,7 +350,11 @@ static GLuint makeVao(uint32_t fmt, GLuint buf) {
     const VtxFmtLayout& l = vtxFmtLayout(fmt);
     glGenVertexArrays(1, &vao);
     glcBindVertexArray(vao);
+#ifdef SMS_GX_UWP_ANGLE
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, s_uwpIbo);
+#else
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf);
+#endif
     glcBindArrayBuffer(buf);
     const GLsizei st = l.stride;
     auto off = [](size_t o) { return reinterpret_cast<const void*>(o); };
@@ -364,6 +390,10 @@ static GLuint makeVao(uint32_t fmt, GLuint buf) {
 // glDrawElementsBaseVertex for the indices at byte offset `iOff` of the element buffer (GL_UNSIGNED_INT), with `vao` bound.
 static void drawElementsBase(GLuint vao, GLenum mode, GLsizei count, size_t iOff, GLint base) {
 #ifdef SMS_GX_UWP_ANGLE
+    if (!base) {
+        glDrawElements(mode, count, GL_UNSIGNED_INT, reinterpret_cast<const void*>(iOff));
+        return;
+    }
     if (!gx::uwp::nativeBaseVertex()) {
         const VaoShape& shape = s_vaoShapes[vao];
         auto point = [&](GLint vertexBase) {
@@ -1632,6 +1662,10 @@ uint32_t arenaGeneration() { return s_arenaGen; }
 
 bool arenaUpload(const uint8_t* verts, uint32_t n, uint32_t stride, const uint32_t* idx, uint32_t nidx, ArenaRef& out) {
     const size_t vbytes = size_t(n) * stride, ibytes = size_t(nidx) * 4, need = vbytes + stride + ibytes + 4;
+#ifdef SMS_GX_UWP_ANGLE
+    (void)need;
+    return false;  // the display-list arena lives in the big stream buffer, which this target does not have (see s_uwpIbo)
+#endif
     if (!s_ready || need > kArenaBytes / 8) return false;
     if (s_arenaPos + need > kArenaBytes) {  // start over, once nothing drawn from the arena is pending
         flushBatch();
@@ -2451,6 +2485,31 @@ void flushBatch() {
             glVertexAttribI4ui(14, m[0], m[1], m[2], 0);
         }
     }
+#ifdef SMS_GX_UWP_ANGLE
+    // this batch's XF block (when it changed), vertices and indices, each into its own buffer (see s_uwpIbo)
+    static uint32_t xfBlock[736];
+    static bool s_uboFilled = false;
+    const bool streamed = s_bidx.size != 0;
+    if (s_xfDirty || !s_uboFilled) {
+        memcpy(xfBlock, &g.xfMem[0], 256 * 4);
+        memcpy(xfBlock + 256, &g.xfMem[0x400], 96 * 4);
+        memcpy(xfBlock + 352, &g.xfMem[0x500], 256 * 4);
+        memcpy(xfBlock + 608, &g.xfMem[0x600], 128 * 4);
+        uwpUpload(s_uwpUbo, xfBlock, sizeof(xfBlock), GL_DYNAMIC_DRAW);
+        s_xfDirty = false;
+        s_uboFilled = true;
+    }
+    if (g_glc.uniformBuffer != s_uwpUbo) {
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, s_uwpUbo);  // the base bind also sets the generic binding
+        g_glc.uniformBuffer = s_uwpUbo;
+    }
+    if (streamed) {
+        uwpUpload(s_stream.buf, s_bdata.data, s_bdata.size, GL_STREAM_DRAW);
+        uwpUpload(s_uwpIbo, s_bidx.data, s_bidx.size * 4, GL_STREAM_DRAW);
+    }
+    const size_t iOff = 0;
+    const GLint streamBase = 0;
+#else
     // this batch's XF block (when it changed), vertices and indices, in one map
     static uint32_t xfBlock[736];
     static size_t s_xfOffset = 0;
@@ -2482,6 +2541,7 @@ void flushBatch() {
     }
     const size_t vOff = streamed ? pc[np - 2].at : 0, iOff = streamed ? pc[np - 1].at : 0;
     const GLint streamBase = GLint(vOff / s_bstride);
+#endif
     GLenum mode = s_bclass == PRIM_TRIS ? GL_TRIANGLES : s_bclass == PRIM_LINES ? GL_LINES : GL_POINTS;
     bool earlyFallback = !shaderHasEarlyFragmentTests() && earlyZWritesRejected();
     // The batch's index ranges in order: (VAO, byte offset of the indices, count, base vertex).
@@ -2545,10 +2605,11 @@ void flushBatch() {
                 drawElementsBase(ranges[i].vao, mode, ranges[i].count, ranges[i].iOff, ranges[i].base);
             }
 #ifdef SMS_GX_UWP_ANGLE
-            else if (!gx::uwp::nativeBaseVertex()) {
+            else {  // glMultiDrawElementsBaseVertexEXT needs an extension this context does not have
                 for (size_t k = i; k < j; k++) drawElementsBase(ranges[k].vao, mode, ranges[k].count, ranges[k].iOff, ranges[k].base);
             }
 #endif
+#ifndef SMS_GX_UWP_ANGLE
             else {
                 counts.clear();
                 offsets.clear();
@@ -2561,6 +2622,7 @@ void flushBatch() {
                 glMultiDrawElementsBaseVertex(mode, counts.data(), GL_UNSIGNED_INT, offsets.data(), GLsizei(j - i),
                                               bases.data());
             }
+#endif
             i = j;
         }
     }
