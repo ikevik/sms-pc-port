@@ -31,6 +31,10 @@ using namespace Windows::ApplicationModel::Core;
 using namespace Windows::UI::Core;
 
 extern "C" uintptr_t probe_call_on_stack(uintptr_t (*fn)(void*), void* arg, void* stackTop);
+#ifdef PROBE_ANGLE
+void run_angle_probe(winrt::Windows::UI::Core::CoreWindow const& window);  // angle_probe.cpp
+#endif
+std::string g_extra;  // lines for probe.log only (angle_probe.cpp)
 
 namespace {
 
@@ -397,13 +401,17 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
 
         window.Activate();
         window.Dispatcher().ProcessEvents(CoreProcessEventsOption::ProcessAllIfPresent);
+#ifdef PROBE_ANGLE
+        run_angle_probe(window);  // the render thread keeps drawing behind the dialogs
+#else
         run_gpu_probe(window);
+#endif
         line("%s: %d check(s) failed", g_fail ? "RESULT FAIL" : "RESULT OK", g_fail);
 
         try {
             std::wstring path = std::wstring(Windows::Storage::ApplicationData::Current().LocalFolder().Path().c_str()) +
                                 L"\\probe.log";
-            std::ofstream(path, std::ios::binary) << g_report;
+            std::ofstream(path, std::ios::binary) << g_report << "\n--- log only ---\n" << g_extra;
         } catch (...) {
         }
 
@@ -427,6 +435,17 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
 };
 
 }  // namespace
+
+// angle_probe.cpp reports through this: page lines go to the dialog pages and the log, the rest to the log only.
+void probe_report(const char* text, bool page)
+{
+    if (page) {
+        line("%s", text);
+    } else {
+        g_extra += text;
+        g_extra += '\n';
+    }
+}
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
