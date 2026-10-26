@@ -8,7 +8,8 @@
 # one restores it and continues. RESULT.txt says whether the build is complete.
 param(
   [string]$Ref = 'main',      # an ANGLE branch, tag or commit
-  [int]$TimeoutMin = 35       # for ninja; the cache restore and save also count against the job's 60
+  [int]$TimeoutMin = 35,      # for ninja; the cache restore and save also count against the job's 60
+  [string]$Tree = 'D:\angle'  # the checkout and out\uwp; the pipeline caches this folder
 )
 $ErrorActionPreference = 'Continue'
 $deadline = (Get-Date).AddMinutes($TimeoutMin)
@@ -44,7 +45,7 @@ foreach ($d in Get-ChildItem "$kits\Include" -Directory -ErrorAction SilentlyCon
 $sdkLog | Tee-Object "$out\sdk.log" | Out-Host
 
 $tools = 'D:\depot_tools'
-$tree = 'D:\angle'     # the checkout (the solution is named "."), and out\uwp inside it
+$tree = $Tree         # the checkout (the solution is named "."), and out\uwp inside it
 if (-not (Test-Path $tools)) {
   Say 'cloning depot_tools'
   git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $tools 2>&1 | Out-Host

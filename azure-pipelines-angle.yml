@@ -31,9 +31,10 @@ jobs:
       key: 'angle | "$(Agent.OS)" | ${{ parameters.angleRef }} | $(Build.BuildId)'
       restoreKeys: |
         angle | "$(Agent.OS)" | ${{ parameters.angleRef }}
-      path: D:\angle
+      path: $(Pipeline.Workspace)\angle
+    continueOnError: true
 
-  - powershell: ./tools/ci/build_angle.ps1 -Ref '${{ parameters.angleRef }}' -TimeoutMin 35
+  - powershell: ./tools/ci/build_angle.ps1 -Ref '${{ parameters.angleRef }}' -TimeoutMin 35 -Tree '$(Pipeline.Workspace)\angle'
     displayName: Fetch and build ANGLE
     continueOnError: true
 
