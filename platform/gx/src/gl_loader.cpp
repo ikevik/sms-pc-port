@@ -55,6 +55,52 @@ struct ErrSeen {
 ErrSeen s_errSeen[96];
 int s_nErrSeen = 0;
 
+void (*s_rawGetIntegeriv)(unsigned, unsigned, int*);
+void (*s_rawGetBufferParameteriv)(unsigned, unsigned, int*);
+void (*s_rawGetVertexAttribiv)(unsigned, unsigned, int*);
+unsigned (*s_rawCheckFramebufferStatus)(unsigned);
+void (*s_rawGetActiveAttrib)(unsigned, unsigned, int, int*, int*, unsigned*, char*);
+int (*s_rawGetAttribLocation)(unsigned, const char*);
+
+// What a failing draw was drawn with: the bindings and the program's attributes against what each is fed.
+void dumpDrawState(int prog) {
+    int vao = 0, ebo = 0, abo = 0, fbo = 0, ub = 0, ubStart = 0, ubSize = 0, eboSize = 0, eboMapped = 0;
+    s_rawGetIntegerv(0x85B5 /* VERTEX_ARRAY_BINDING */, &vao);
+    s_rawGetIntegerv(0x8895 /* ELEMENT_ARRAY_BUFFER_BINDING */, &ebo);
+    s_rawGetIntegerv(0x8894 /* ARRAY_BUFFER_BINDING */, &abo);
+    s_rawGetIntegerv(0x8CA6 /* DRAW_FRAMEBUFFER_BINDING */, &fbo);
+    s_rawGetIntegeriv(0x8A28 /* UNIFORM_BUFFER_BINDING */, 0, &ub);
+    s_rawGetIntegeriv(0x8A29 /* UNIFORM_BUFFER_START */, 0, &ubStart);
+    s_rawGetIntegeriv(0x8A2A /* UNIFORM_BUFFER_SIZE */, 0, &ubSize);
+    if (ebo) {
+        s_rawGetBufferParameteriv(0x8893 /* ELEMENT_ARRAY_BUFFER */, 0x8764 /* BUFFER_SIZE */, &eboSize);
+        s_rawGetBufferParameteriv(0x8893, 0x88BC /* BUFFER_MAPPED */, &eboMapped);
+    }
+    gx::logmsg("[GLCHECK]   state: vao %d, element buffer %d (%d bytes, mapped %d), array buffer %d, uniform buffer 0: %d "
+               "(offset %d, size %d), draw framebuffer %d status 0x%X",
+               vao, ebo, eboSize, eboMapped, abo, ub, ubStart, ubSize, fbo, s_rawCheckFramebufferStatus(0x8CA6));
+    int n = 0;
+    s_rawGetProgramiv(unsigned(prog), 0x8B89 /* ACTIVE_ATTRIBUTES */, &n);
+    for (int i = 0; i < n && i < 16; i++) {
+        char name[64] = {0};
+        int len = 0, size = 0;
+        unsigned type = 0;
+        s_rawGetActiveAttrib(unsigned(prog), unsigned(i), sizeof name, &len, &size, &type, name);
+        const int loc = s_rawGetAttribLocation(unsigned(prog), name);
+        int on = 0, integer = 0, buf = 0, comps = 0, atype = 0;
+        if (loc >= 0) {
+            s_rawGetVertexAttribiv(unsigned(loc), 0x8622 /* ARRAY_ENABLED */, &on);
+            s_rawGetVertexAttribiv(unsigned(loc), 0x88FD /* ARRAY_INTEGER */, &integer);
+            s_rawGetVertexAttribiv(unsigned(loc), 0x889F /* ARRAY_BUFFER_BINDING */, &buf);
+            s_rawGetVertexAttribiv(unsigned(loc), 0x8623 /* ARRAY_SIZE */, &comps);
+            s_rawGetVertexAttribiv(unsigned(loc), 0x8625 /* ARRAY_TYPE */, &atype);
+        }
+        gx::logmsg("[GLCHECK]   attribute %s at %d: shader type 0x%X; array %s, integer %d, buffer %d, %d x type 0x%X", name, loc, type,
+                   on ? "on" : "off", integer, buf, comps, atype);
+    }
+    while (s_rawGetError() != 0) {}
+}
+
 void reportGlErrors(const char* name) {
     for (int k = 0; k < 4; k++) {
         const unsigned err = s_rawGetError();
@@ -80,6 +126,7 @@ void reportGlErrors(const char* name) {
                 s_rawGetProgramiv(unsigned(prog), 0x8B83 /* GL_VALIDATE_STATUS */, &ok);
                 s_rawGetProgramInfoLog(unsigned(prog), sizeof log, nullptr, log);
                 gx::logmsg("[GLCHECK]   program %d: validate %s: %s", prog, ok ? "ok" : "failed", log);
+                dumpDrawState(prog);
                 while (s_rawGetError() != 0) {}
             } else {
                 gx::logmsg("[GLCHECK]   no program in use");
@@ -146,7 +193,15 @@ bool load(void* (*getProc)(const char*)) {
         s_rawValidate = reinterpret_cast<void (*)(unsigned)>(getProc("glValidateProgram"));
         s_rawGetProgramiv = reinterpret_cast<void (*)(unsigned, unsigned, int*)>(getProc("glGetProgramiv"));
         s_rawGetProgramInfoLog = reinterpret_cast<void (*)(unsigned, int, int*, char*)>(getProc("glGetProgramInfoLog"));
-        if (s_rawGetError && s_rawGetIntegerv && s_rawValidate && s_rawGetProgramiv && s_rawGetProgramInfoLog) {
+        s_rawGetIntegeriv = reinterpret_cast<void (*)(unsigned, unsigned, int*)>(getProc("glGetIntegeri_v"));
+        s_rawGetBufferParameteriv = reinterpret_cast<void (*)(unsigned, unsigned, int*)>(getProc("glGetBufferParameteriv"));
+        s_rawGetVertexAttribiv = reinterpret_cast<void (*)(unsigned, unsigned, int*)>(getProc("glGetVertexAttribiv"));
+        s_rawCheckFramebufferStatus = reinterpret_cast<unsigned (*)(unsigned)>(getProc("glCheckFramebufferStatus"));
+        s_rawGetActiveAttrib = reinterpret_cast<void (*)(unsigned, unsigned, int, int*, int*, unsigned*, char*)>(getProc("glGetActiveAttrib"));
+        s_rawGetAttribLocation = reinterpret_cast<int (*)(unsigned, const char*)>(getProc("glGetAttribLocation"));
+        if (s_rawGetError && s_rawGetIntegerv && s_rawValidate && s_rawGetProgramiv && s_rawGetProgramInfoLog && s_rawGetIntegeriv &&
+            s_rawGetBufferParameteriv && s_rawGetVertexAttribiv && s_rawCheckFramebufferStatus && s_rawGetActiveAttrib &&
+            s_rawGetAttribLocation) {
 #define SMS_GX_CHECK(type, name)                                                                         \
             if (strcmp(#name, "glGetError")) {                                                           \
                 static type real_##name;                                                                 \

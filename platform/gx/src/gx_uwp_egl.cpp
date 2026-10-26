@@ -141,7 +141,21 @@ static void (*s_depthRangef)(float, float);
 static void clearDepthDouble(double d) { s_clearDepthf((float)d); }
 static void depthRangeDouble(double n, double f) { s_depthRangef((float)n, (float)f); }
 
+// Entry points ES 3.2 made core that an ES 3.0 context reaches only through an extension. ANGLE resolves the plain name too,
+// but its validation then asks for ES 3.2 and every call fails with GL_INVALID_OPERATION (this is what drew nothing:
+// each batch's glDrawElementsBaseVertex), so the extension's own name is taken first.
+static const char* const kExtensionFirst[] = {"glDrawElementsBaseVertex", "glMultiDrawElementsBaseVertex", "glDebugMessageCallback",
+                                              "glDebugMessageControl", "glDebugMessageInsert", "glGetDebugMessageLog",
+                                              "glPushDebugGroup", "glPopDebugGroup", "glObjectLabel"};
+
 void* getProc(const char* name) {
+    for (const char* extFirst : kExtensionFirst) {
+        if (strcmp(name, extFirst)) continue;
+        for (const char* suffix : {"EXT", "OES", "KHR"}) {
+            const std::string alt = std::string(name) + suffix;
+            if (void* p = reinterpret_cast<void*>(eglGetProcAddress(alt.c_str()))) return p;
+        }
+    }
     if (!strcmp(name, "glBufferStorage") && !hasExtension("GL_EXT_buffer_storage")) return nullptr;  // the renderer then streams through plain buffers
     if (!strcmp(name, "glClearDepth")) {
         s_clearDepthf = reinterpret_cast<void (*)(float)>(eglGetProcAddress("glClearDepthf"));
