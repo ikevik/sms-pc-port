@@ -125,7 +125,8 @@ $progress = ''
 if ($gnOk) {
   Say 'autoninja libEGL libGLESv2'
   $left = [int]($deadline - (Get-Date)).TotalMilliseconds
-  $p = Start-Process autoninja.bat -ArgumentList @('-k', '0', '-C', 'out\uwp', 'libEGL', 'libGLESv2')   # -k 0: report every failing step, not just the first -NoNewWindow -PassThru `
+  # -k 0: report every failing step, not just the first
+  $p = Start-Process autoninja.bat -ArgumentList @('-k', '0', '-C', 'out\uwp', 'libEGL', 'libGLESv2') -NoNewWindow -PassThru `
     -RedirectStandardOutput "$out\ninja.log" -RedirectStandardError "$out\ninja.err.log"
   if (-not $p.WaitForExit($left)) {
     taskkill /PID $p.Id /T /F | Out-Null
