@@ -1391,8 +1391,15 @@ void GXPC_Present(const void* xfb) {
         uwp::surfaceSize(&w, &h);
         // on the GL thread, after what the frame queued: the picture, then the swap (which waits for vertical sync)
         glt::sync([&] {
-            GXPC_PresentXFB(xfb, w, h);
-            GXPC_OverlayDraw(w, h);
+            static const bool pattern = getenv("SMS_UWP_TEST_PATTERN") != nullptr;
+            int shown = 1;
+            if (pattern) {
+                uwp::testPattern(s_frame);
+            } else {
+                shown = GXPC_PresentXFB(xfb, w, h);
+                GXPC_OverlayDraw(w, h);
+            }
+            uwp::frameProbe(w, h, s_frame, shown);
             uwp::swap();
         });
         GXPC_EndPresent();

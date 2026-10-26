@@ -414,6 +414,15 @@ static GLuint compileProgram(const char* vs, const char* fs) {
     glAttachShader(p, f);
     glBindFragDataLocation(p, 0, "o_color");
     glLinkProgram(p);
+    {
+        GLint linked = 0;
+        glGetProgramiv(p, GL_LINK_STATUS, &linked);
+        if (!linked) {
+            char log[2048];
+            glGetProgramInfoLog(p, sizeof log, nullptr, log);
+            logmsg("internal program link failed: %s", log);
+        }
+    }
     glDeleteShader(v);
     glDeleteShader(f);
     return p;
@@ -3644,3 +3653,43 @@ void GXPC_GetStats(GXPCStats* out) {
 }
 
 }  // extern "C"
+
+#ifdef SMS_GX_UWP_ANGLE
+namespace gx {
+namespace uwp {
+
+void testPattern(unsigned frame) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    const float k = (frame % 180) / 180.0f;
+    glClearColor(k, 1.0f - k, 0.4f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+}
+
+void frameProbe(int w, int h, unsigned frame, int presented) {
+    static int errorsLogged = 0, probes = 0;
+    for (int n = 0; n < 4; n++) {
+        const GLenum err = glGetError();
+        if (err == GL_NO_ERROR) break;
+        if (errorsLogged++ < 30) logmsg("[ES] glGetError 0x%X at frame %u", (unsigned)err, frame);
+    }
+    if (!(frame < 4 || frame % 300 == 0) || probes >= 14) return;
+    probes++;
+    GLint fbo = -1;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
+    char line[600];
+    int len = snprintf(line, sizeof line, "[ES] frame %u: PresentXFB=%d, fbo %d, back buffer %dx%d, rgb at 3x5 points:", frame,
+                       presented, fbo, w, h);
+    for (int row = 0; row < 3; row++)
+        for (int col = 0; col < 5; col++) {
+            unsigned char px[4] = {0, 0, 0, 0};
+            glReadPixels((w - 1) * (col + 1) / 6, (h - 1) * (row + 1) / 4, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+            len += snprintf(line + len, sizeof line - size_t(len), " %02x%02x%02x", px[0], px[1], px[2]);
+        }
+    logmsg("%s", line);
+}
+
+}  // namespace uwp
+}  // namespace gx
+#endif

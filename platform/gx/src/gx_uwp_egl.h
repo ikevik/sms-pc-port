@@ -26,6 +26,11 @@ std::string toEs300(const char* src);
 // The controller, supplied by the app (src/uwp/uwp_input.cpp) as SDL-style controller events: pad.cpp registers its event
 // handler through sms_gx_set_event_callback, and every pad read pumps the poll.
 void setEventCallback(void (*cb)(const void* sdlEvent));
+// Diagnostics on the GL thread (gx_render.cpp): after the picture is drawn and before the swap, log GL errors and what
+// the back buffer holds (a few frames, then now and then); or draw a test colour in place of the game's picture
+// (SMS_UWP_TEST_PATTERN=1) to tell the display path from the renderer.
+void frameProbe(int w, int h, unsigned frame, int presented);
+void testPattern(unsigned frame);
 void registerInput(void (*poll)(void (*emit)(const void*)), int (*rumble)(unsigned short));
 void pumpInput();
 int rumble(unsigned short strength);  // 1 if a controller took it
