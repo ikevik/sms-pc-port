@@ -31,6 +31,7 @@ using namespace Windows::UI::Core;
 
 int sms_game_main(int argc, char** argv);
 extern "C" unsigned int VIGetRetraceCount(void);  // platform/vi/vi.cpp
+extern "C" unsigned int GXPC_FrameCount(void);    // platform/gx/src/gx_platform.cpp: pictures presented
 extern "C" int GXPC_UwpAttachWindow(void* coreWindow);       // platform/gx/src/gx_uwp_egl.cpp
 
 namespace {
@@ -87,6 +88,20 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
         const int attached = GXPC_UwpAttachWindow(winrt::get_abi(window));
         fprintf(stderr, "[uwp] ANGLE window context: %s\n", attached ? "ready" : "not created (see above)");
 
+        // env.txt (optional): NAME=VALUE lines set as environment variables for the game, for trying its settings
+        // without a new build, e.g. SMS_GX_SHADER_WARMUP=off or SMS_GX_SCALE=1.
+        {
+            std::ifstream env(dir + "\\env.txt");
+            for (std::string line; std::getline(env, line);) {
+                while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
+                    line.pop_back();
+                const size_t eq = line.find('=');
+                if (eq == std::string::npos || eq == 0 || line[0] == '#')
+                    continue;
+                _putenv_s(line.substr(0, eq).c_str(), line.substr(eq + 1).c_str());
+                fprintf(stderr, "[uwp] env.txt: %s\n", line.c_str());
+            }
+        }
         g_args.push_back("sms");
         std::ifstream args(dir + "\\args.txt");
         for (std::string line; std::getline(args, line);) {
@@ -113,17 +128,21 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
         // much of the app's memory limit it uses, long after the last line the game prints.
         std::thread([] {
             unsigned last = VIGetRetraceCount();
+            unsigned lastFrames = GXPC_FrameCount();
             for (int i = 1;; i++) {
                 Sleep(5000);
                 const unsigned now = VIGetRetraceCount();
+                const unsigned frames = GXPC_FrameCount();
                 unsigned long long usage = 0, limit = 0;
                 try {
                     usage = Windows::System::MemoryManager::AppMemoryUsage() >> 20;
                     limit = Windows::System::MemoryManager::AppMemoryUsageLimit() >> 20;
                 } catch (...) {
                 }
-                fprintf(stderr, "[uwp] %4d s: retrace %u (+%u), memory %llu of %llu MiB\n", i * 5, now, now - last, usage, limit);
+                fprintf(stderr, "[uwp] %4d s: retrace %u (+%u), pictures %u (+%u), memory %llu of %llu MiB\n", i * 5, now, now - last,
+                        frames, frames - lastFrames, usage, limit);
                 last = now;
+                lastFrames = frames;
             }
         }).detach();
 
