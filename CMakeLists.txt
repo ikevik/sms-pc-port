@@ -457,7 +457,11 @@ if(SMS_MSVC_TARGET)
   target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/win_posix.cpp)
   target_compile_definitions(sms PRIVATE SMS_PLATFORM_UNIT=1)
   if(SMS_UWP)
-    target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/uwp_stubs.cpp)
+    target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/uwp_stubs.cpp
+                   ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_main.cpp)
+    # The WinRT entry (C++/WinRT needs C++17 or later) starts the game's main, renamed here.
+    set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_main.cpp PROPERTIES COMPILE_OPTIONS "-std=gnu++20")
+    set_source_files_properties(${SMS_PORT_SRC}/port_main.cpp PROPERTIES COMPILE_DEFINITIONS "main=sms_game_main")
   endif()
 endif()
 # MSL's maths and the MTX/VEC library round every operation to single or
@@ -505,8 +509,8 @@ if(SMS_MSVC_TARGET)
   target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/win_symbols.cpp)
   target_link_options(sms PRIVATE -Wl,/BASE:0x400000 -Wl,/HIGHENTROPYVA:NO)
   if(SMS_UWP)
-    # A UWP image runs in an AppContainer. The entry stays the console one until the WinRT entry exists.
-    target_link_options(sms PRIVATE -Wl,/APPCONTAINER -Wl,/SUBSYSTEM:WINDOWS -Wl,/ENTRY:mainCRTStartup)
+    # A UWP image runs in an AppContainer; its entry is wWinMain (src/uwp/uwp_main.cpp).
+    target_link_options(sms PRIVATE -Wl,/APPCONTAINER -Wl,/SUBSYSTEM:WINDOWS)
   endif()
 elseif(WIN32)
   target_link_options(sms PRIVATE "-Wl,--defsym=${_object_prefix}lbl_80004600=0x80004600")

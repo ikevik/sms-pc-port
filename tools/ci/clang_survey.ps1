@@ -107,6 +107,35 @@ if (Test-Path "$Build\sms.exe") {
   Say "sms.exe linked: $((Get-Item "$Build\sms.exe").Length / 1MB) MB"
 }
 
+# UWP: pack and sign the linked sms.exe (tools/uwp/AppxManifest.xml.in) so it can be installed on the
+# console. The certificate is made here and thrown away; SmsDev.cer is published to trust it.
+if ($Uwp -and (Test-Path "$Build\sms.exe")) {
+  Say 'packaging the UWP build'
+  try {
+    $kits = 'C:\Program Files (x86)\Windows Kits\10\bin'
+    $makeappx = Get-ChildItem "$kits\10.*\x64\makeappx.exe" | Sort-Object { [version]$_.Directory.Parent.Name } | Select-Object -Last 1 -ExpandProperty FullName
+    $signtool = Get-ChildItem "$kits\10.*\x64\signtool.exe" | Sort-Object { [version]$_.Directory.Parent.Name } | Select-Object -Last 1 -ExpandProperty FullName
+    $layout = "$out\layout"
+    New-Item -ItemType Directory -Force "$layout\Assets" | Out-Null
+    Copy-Item "$Build\sms.exe" $layout
+    Copy-Item tools\uwp-probe\Assets\*.png "$layout\Assets"
+    Copy-Item tools\uwp\AppxManifest.xml.in "$layout\AppxManifest.xml"
+    $cert = New-SelfSignedCertificate -Type Custom -Subject 'CN=SmsDev' -KeyUsage DigitalSignature `
+      -CertStoreLocation Cert:\CurrentUser\My -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
+    $pw = [guid]::NewGuid().ToString()
+    $pfx = Join-Path $env:TEMP 'sms-uwp.pfx'
+    Export-PfxCertificate -Cert $cert -FilePath $pfx -Password (ConvertTo-SecureString $pw -AsPlainText -Force) | Out-Null
+    Export-Certificate -Cert $cert -FilePath "$out\bin\SmsDev.cer" | Out-Null
+    & $makeappx pack /d $layout /p "$out\bin\sms-pc-port-uwp.msix" /o 2>&1 | Out-Host
+    & $signtool sign /fd SHA256 /f $pfx /p $pw "$out\bin\sms-pc-port-uwp.msix" 2>&1 | Out-Host
+    Remove-Item $pfx -ErrorAction SilentlyContinue
+    $vclibs = Get-ChildItem 'C:\Program Files (x86)\Microsoft SDKs\Windows Kits\10\ExtensionSDKs\Microsoft.VCLibs' `
+      -Recurse -Filter 'Microsoft.VCLibs.x64.14.00.appx' -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -notmatch 'Debug' } | Select-Object -First 1
+    if ($vclibs) { Copy-Item $vclibs.FullName "$out\bin\" } else { Write-Host 'Microsoft.VCLibs.x64.14.00.appx not found' }
+  } catch { Write-Host "packaging failed: $_" }
+}
+
 # When the link fails, show how the objects define the symbols involved (dumpbin ships with MSVC).
 if ($configured -and -not (Test-Path "$Build\sms.exe")) {
   Say 'link diagnostics'
