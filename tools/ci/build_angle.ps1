@@ -25,6 +25,20 @@ git config --global core.autocrlf false
 git config --global core.longpaths true
 git config --global core.filemode false
 
+# The runner can carry a Windows SDK folder that is not complete (no um\Windows.h); vcvarsall picks the
+# newest version it finds and Chromium's toolchain script then stops on the missing include folder.
+# The runner is thrown away afterwards, so drop the incomplete ones. sdk.log lists what was there.
+$kits = 'C:\Program Files (x86)\Windows Kits\10'
+$sdkLog = @()
+foreach ($d in Get-ChildItem "$kits\Include" -Directory -ErrorAction SilentlyContinue) {
+  $ok = Test-Path "$($d.FullName)\um\Windows.h"
+  $sdkLog += "$($d.Name): um\Windows.h $(if ($ok) { 'present' } else { 'MISSING, removed' })"
+  if (-not $ok) {
+    foreach ($sub in 'Include', 'Lib', 'bin', 'Source') { Remove-Item "$kits\$sub\$($d.Name)" -Recurse -Force -ErrorAction SilentlyContinue }
+  }
+}
+$sdkLog | Tee-Object "$out\sdk.log" | Out-Host
+
 $tools = 'D:\depot_tools'
 $src = 'D:\angle'
 if (-not (Test-Path $tools)) {
