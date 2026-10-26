@@ -5,6 +5,9 @@
 #include "gx_internal.h"
 #include "gx_glthread.h"
 #include "gl_funcs.h"
+#ifdef SMS_GX_UWP_ANGLE
+#include "gx_uwp_egl.h"
+#endif
 #include "gx_glcache.h"
 
 #include <stdio.h>
@@ -549,7 +552,12 @@ static std::string genFS(const ShaderKey& k) {
 // ------------------------------------------------------------------ compile / cache
 static GLuint compile(GLenum type, const std::string& src) {
     GLuint sh = glCreateShader(type);
+#ifdef SMS_GX_UWP_ANGLE
+    const std::string es = uwp::toEs300(src.c_str());
+    const char* p = es.c_str();
+#else
     const char* p = src.c_str();
+#endif
     glShaderSource(sh, 1, &p, nullptr);
     glCompileShader(sh);
     GLint ok = 0;
@@ -557,7 +565,7 @@ static GLuint compile(GLenum type, const std::string& src) {
     if (!ok) {
         char log[4096];
         glGetShaderInfoLog(sh, sizeof log, nullptr, log);
-        logmsg("shader compile failed:\n%s\n--- source ---\n%s", log, src.c_str());
+        logmsg("shader compile failed:\n%s\n--- source ---\n%s", log, p);
     }
     return sh;
 }
@@ -839,7 +847,12 @@ static std::vector<Warmed> s_warmed;
 
 static GLuint startCompile(GLenum type, const std::string& src) {
     GLuint sh = glCreateShader(type);
+#ifdef SMS_GX_UWP_ANGLE
+    const std::string es = uwp::toEs300(src.c_str());
+    const char* p = es.c_str();
+#else
     const char* p = src.c_str();
+#endif
     glShaderSource(sh, 1, &p, nullptr);
     glCompileShader(sh);
     return sh;
@@ -1127,7 +1140,9 @@ const ShaderProgram* shaderForCurrentState(bool depthOnly, bool lines) {
     k.depthOnly = depthOnly;
     key.indScale[0] = k.numInd ? g.bp[BP_RAS1_SS0] : 0;
     key.indScale[1] = k.numInd ? g.bp[BP_RAS1_SS0 + 1] : 0;
+#ifndef SMS_GX_UWP_ANGLE  // the line quads come from a geometry shader, which this ES 3.0 context lacks: 1-pixel lines
     if (lines) return lineProgram(key);
+#endif
     // consecutive batches mostly share a program
     if (s_lastProgram && key == s_lastKey) return s_lastProgram;
     recordKey(key);

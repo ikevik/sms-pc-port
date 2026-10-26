@@ -19,6 +19,7 @@
 
 #include <string.h>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -86,7 +87,21 @@ namespace uwp {
 
 bool available() { return s_surf != EGL_NO_SURFACE && s_ctx != EGL_NO_CONTEXT; }
 
+// Desktop GL takes doubles where ES has float versions under other names.
+static void (*s_clearDepthf)(float);
+static void (*s_depthRangef)(float, float);
+static void clearDepthDouble(double d) { s_clearDepthf((float)d); }
+static void depthRangeDouble(double n, double f) { s_depthRangef((float)n, (float)f); }
+
 void* getProc(const char* name) {
+    if (!strcmp(name, "glClearDepth")) {
+        s_clearDepthf = reinterpret_cast<void (*)(float)>(eglGetProcAddress("glClearDepthf"));
+        return s_clearDepthf ? reinterpret_cast<void*>(&clearDepthDouble) : nullptr;
+    }
+    if (!strcmp(name, "glDepthRange")) {
+        s_depthRangef = reinterpret_cast<void (*)(float, float)>(eglGetProcAddress("glDepthRangef"));
+        return s_depthRangef ? reinterpret_cast<void*>(&depthRangeDouble) : nullptr;
+    }
     if (void* p = reinterpret_cast<void*>(eglGetProcAddress(name))) return p;
     for (const char* suffix : {"EXT", "OES", "KHR"}) {
         const std::string alt = std::string(name) + suffix;
@@ -111,6 +126,47 @@ void surfaceSize(int* w, int* h) {
 void swap() {
     eglSwapInterval(s_dpy, 1);
     eglSwapBuffers(s_dpy, s_surf);
+}
+
+static bool startsWith(const std::string& s, size_t at, const char* what) { return s.compare(at, strlen(what), what) == 0; }
+
+std::string toEs300(const char* source) {
+    const std::string src(source);
+    std::vector<std::string> lines;
+    for (size_t i = 0; i <= src.size();) {
+        const size_t nl = src.find('\n', i);
+        if (nl == std::string::npos) {
+            if (i < src.size()) lines.push_back(src.substr(i));
+            break;
+        }
+        lines.push_back(src.substr(i, nl - i));
+        i = nl + 1;
+    }
+    const bool clip = src.find("gl_ClipDistance") != std::string::npos;
+    std::string head, body;
+    bool inHead = true;
+    for (const std::string& line : lines) {
+        size_t at = line.find_first_not_of(" \t");
+        const std::string trimmed = at == std::string::npos ? std::string() : line.substr(at);
+        if (inHead && (trimmed.empty() || trimmed[0] == '#')) {
+            if (startsWith(trimmed, 0, "#version")) head += "#version 300 es\n";
+            else if (startsWith(trimmed, 0, "#extension GL_ARB_")) {}  // desktop only
+            else head += line + "\n";
+            continue;
+        }
+        if (inHead) {
+            inHead = false;
+            if (clip) head += "#extension GL_EXT_clip_cull_distance : require\n";
+            head += "precision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp isampler2D;\n"
+                    "precision highp usampler2D;\nprecision highp sampler2DArray;\nprecision highp sampler3D;\n"
+                    "precision highp samplerCube;\nprecision highp sampler2DShadow;\n";
+        }
+        if (trimmed == "out vec4 o_color;" || trimmed == "out vec4 o;" || trimmed == "out uvec4 o_color;")
+            body += "layout(location = 0) " + trimmed + "\n";
+        else
+            body += line + "\n";
+    }
+    return head + body;
 }
 
 }  // namespace uwp

@@ -2,6 +2,8 @@
 // (docs/UWP-GRAPHICS.md, section 2). Built only with SMS_UWP.
 #pragma once
 
+#include <string>
+
 namespace gx {
 namespace uwp {
 
@@ -16,6 +18,10 @@ void releaseCurrent();
 void surfaceSize(int* w, int* h);
 // eglSwapBuffers (waits for the display's vertical sync).
 void swap();
+// The renderer's GLSL 3.30 core shaders as GLSL ES 3.00: the version line, default precisions, the extension for clip
+// distances, no desktop-only extensions, and an explicit location for the fragment output (ES has no
+// glBindFragDataLocation).
+std::string toEs300(const char* src);
 
 }  // namespace uwp
 }  // namespace gx

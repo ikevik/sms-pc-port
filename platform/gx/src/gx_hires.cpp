@@ -23,6 +23,9 @@
 // Late textures show their original until a bounded frame-end upload finishes.
 #include "gx_internal.h"
 #include "gl_funcs.h"
+#ifdef SMS_GX_UWP_ANGLE
+#include "gx_uwp_egl.h"
+#endif
 #include "gx_glcache.h"
 #include "gx_glthread.h"
 #include "gx_path.h"
@@ -1558,8 +1561,15 @@ static void touchFresh() {
         static const char* kFs = "#version 330 core\nuniform sampler2D t;\nout vec4 o;\n"
                                  "void main() { o = textureLod(t, vec2(0.5), 0.0); }\n";
         GLuint v = glCreateShader(GL_VERTEX_SHADER), f = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(v, 1, &kVs, nullptr);
-        glShaderSource(f, 1, &kFs, nullptr);
+        const char* vsSrc = kVs;
+        const char* fsSrc = kFs;
+#ifdef SMS_GX_UWP_ANGLE
+        const std::string esVs = uwp::toEs300(kVs), esFs = uwp::toEs300(kFs);
+        vsSrc = esVs.c_str();
+        fsSrc = esFs.c_str();
+#endif
+        glShaderSource(v, 1, &vsSrc, nullptr);
+        glShaderSource(f, 1, &fsSrc, nullptr);
         glCompileShader(v);
         glCompileShader(f);
         s_touchProg = glCreateProgram();

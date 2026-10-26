@@ -3,6 +3,14 @@
 // presentation.
 #include "gx_internal.h"
 #include "gl_funcs.h"
+#ifdef SMS_GX_UWP_ANGLE
+#include "gx_uwp_egl.h"
+#endif
+#ifdef SMS_GX_UWP_ANGLE
+// ES has only the boolean occlusion query (the game's counts become 0 or 1).
+#undef GL_SAMPLES_PASSED
+#define GL_SAMPLES_PASSED GL_ANY_SAMPLES_PASSED
+#endif
 #include "gx_glcache.h"
 #include "gx_glthread.h"
 #include "gx_nis_coef.h"
@@ -385,6 +393,10 @@ bool rendererReady() { return s_ready; }
 static GLuint compileProgram(const char* vs, const char* fs) {
     auto sh = [](GLenum t, const char* src) {
         GLuint s = glCreateShader(t);
+#ifdef SMS_GX_UWP_ANGLE
+        const std::string es = uwp::toEs300(src);
+        src = es.c_str();
+#endif
         glShaderSource(s, 1, &src, nullptr);
         glCompileShader(s);
         GLint ok = 0;
