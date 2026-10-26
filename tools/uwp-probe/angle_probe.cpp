@@ -100,75 +100,93 @@ void test_program(const char* name, const char* vs, const char* fs, const char* 
     glDeleteProgram(p);
 }
 
-void render_thread(winrt::Windows::UI::Core::CoreWindow window)
+struct Egl {
+    EGLDisplay dpy = EGL_NO_DISPLAY;
+    EGLConfig cfg = nullptr;
+    EGLContext ctx = EGL_NO_CONTEXT;
+    EGLSurface surf = EGL_NO_SURFACE;
+    int es = 0;  // the ES 3.x minor version granted
+};
+
+// ANGLE's own messages (EGL_KHR_debug): errors to the page, everything to the log.
+void EGLAPIENTRY on_egl_message(EGLenum error, const char* command, EGLint type, EGLLabelKHR, EGLLabelKHR, const char* message)
+{
+    const bool bad = type == EGL_DEBUG_MSG_CRITICAL_KHR || type == EGL_DEBUG_MSG_ERROR_KHR;
+    rep(false, "[EGL message %d, error 0x%X] %s: %s", (int)type, (unsigned)error, command ? command : "?", message ? message : "");
+    if (bad)
+        rep(true, "[EGL] %s: %s", command ? command : "?", first_line(message ? message : "", 70).c_str());
+}
+
+// Display, config, context and window surface. This runs on the UI thread: a CoreWindow can only be used from
+// the thread that owns it, and ANGLE reads its size and subscribes to its events when the surface is made.
+bool setup_egl(winrt::Windows::UI::Core::CoreWindow const& window, Egl& e)
 {
     auto getPlatformDisplay = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
     if (!getPlatformDisplay) {
         rep(true, "[FAIL] eglGetPlatformDisplayEXT is missing");
-        g_ready = true;
-        return;
+        return false;
+    }
+    if (auto debugControl = reinterpret_cast<PFNEGLDEBUGMESSAGECONTROLKHRPROC>(eglGetProcAddress("eglDebugMessageControlKHR"))) {
+        const EGLAttrib attribs[] = {EGL_DEBUG_MSG_CRITICAL_KHR, EGL_TRUE, EGL_DEBUG_MSG_ERROR_KHR, EGL_TRUE,
+                                     EGL_DEBUG_MSG_WARN_KHR, EGL_TRUE, EGL_DEBUG_MSG_INFO_KHR, EGL_TRUE, EGL_NONE};
+        debugControl(on_egl_message, attribs);
     }
     const EGLint dispAttribs[] = {EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE, EGL_NONE};
-    EGLDisplay dpy = getPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, (void*)EGL_DEFAULT_DISPLAY, dispAttribs);
+    e.dpy = getPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, (void*)EGL_DEFAULT_DISPLAY, dispAttribs);
     EGLint major = 0, minor = 0;
-    if (dpy == EGL_NO_DISPLAY || !eglInitialize(dpy, &major, &minor)) {
+    if (e.dpy == EGL_NO_DISPLAY || !eglInitialize(e.dpy, &major, &minor)) {
         rep(true, "[FAIL] ANGLE display on D3D11: error 0x%X", eglGetError());
-        g_ready = true;
-        return;
+        return false;
     }
     rep(true, "[PASS] ANGLE display: EGL %d.%d", major, minor);
-    rep(false, "EGL vendor: %s", eglQueryString(dpy, EGL_VENDOR));
-    rep(false, "EGL version: %s", eglQueryString(dpy, EGL_VERSION));
-    rep(false, "EGL extensions: %s", eglQueryString(dpy, EGL_EXTENSIONS));
+    rep(false, "EGL vendor: %s", eglQueryString(e.dpy, EGL_VENDOR));
+    rep(false, "EGL version: %s", eglQueryString(e.dpy, EGL_VERSION));
+    rep(false, "EGL extensions: %s", eglQueryString(e.dpy, EGL_EXTENSIONS));
     rep(false, "EGL client extensions: %s", eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS));
 
     eglBindAPI(EGL_OPENGL_ES_API);
     const EGLint cfgAttribs[] = {EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
                                  EGL_DEPTH_SIZE, 24, EGL_STENCIL_SIZE, 8,
                                  EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_NONE};
-    EGLConfig cfg = nullptr;
     EGLint nCfg = 0;
-    if (!eglChooseConfig(dpy, cfgAttribs, &cfg, 1, &nCfg) || nCfg < 1) {
+    if (!eglChooseConfig(e.dpy, cfgAttribs, &e.cfg, 1, &nCfg) || nCfg < 1) {
         rep(true, "[FAIL] no ES3 window config: error 0x%X", eglGetError());
-        g_ready = true;
-        return;
+        return false;
     }
 
-    // The highest ES version the context gives: 3.2, 3.1, then 3.0.
-    EGLContext ctx = EGL_NO_CONTEXT;
-    int got = 0;
+    // The highest ES version the context gives: 3.2, 3.1, then 3.0 (what each try said goes to the log).
     for (int minorTry : {2, 1, 0}) {
         const EGLint ctxAttribs[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, minorTry, EGL_NONE};
-        ctx = eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, ctxAttribs);
-        if (ctx != EGL_NO_CONTEXT) {
-            got = minorTry;
+        e.ctx = eglCreateContext(e.dpy, e.cfg, EGL_NO_CONTEXT, ctxAttribs);
+        if (e.ctx != EGL_NO_CONTEXT) {
+            e.es = minorTry;
             break;
         }
+        rep(false, "ES 3.%d context: refused, error 0x%X", minorTry, eglGetError());
     }
-    if (ctx == EGL_NO_CONTEXT) {
+    if (e.ctx == EGL_NO_CONTEXT) {
         rep(true, "[FAIL] no ES 3.x context: error 0x%X", eglGetError());
-        g_ready = true;
-        return;
+        return false;
     }
-    rep(true, "[PASS] context created: ES 3.%d requested and granted", got);
+    rep(true, "[PASS] context created: ES 3.%d requested and granted", e.es);
 
     const EGLint surfAttribs[] = {EGL_NONE};
-    EGLSurface surf = eglCreateWindowSurface(dpy, cfg, reinterpret_cast<EGLNativeWindowType>(winrt::get_abi(window)), surfAttribs);
-    if (surf == EGL_NO_SURFACE) {
+    e.surf = eglCreateWindowSurface(e.dpy, e.cfg, reinterpret_cast<EGLNativeWindowType>(winrt::get_abi(window)), surfAttribs);
+    if (e.surf == EGL_NO_SURFACE) {
         rep(true, "[FAIL] window surface on the CoreWindow: error 0x%X", eglGetError());
-        g_ready = true;
-        return;
+    } else {
+        EGLint w = 0, h = 0;
+        eglQuerySurface(e.dpy, e.surf, EGL_WIDTH, &w);
+        eglQuerySurface(e.dpy, e.surf, EGL_HEIGHT, &h);
+        rep(true, "[PASS] window surface %dx%d on the CoreWindow", w, h);
     }
-    if (!eglMakeCurrent(dpy, surf, surf, ctx)) {
-        rep(true, "[FAIL] eglMakeCurrent: error 0x%X", eglGetError());
-        g_ready = true;
-        return;
-    }
-    EGLint w = 0, h = 0;
-    eglQuerySurface(dpy, surf, EGL_WIDTH, &w);
-    eglQuerySurface(dpy, surf, EGL_HEIGHT, &h);
-    rep(true, "[PASS] window surface %dx%d, context current", w, h);
+    return true;
+}
 
+// The report on the current context: versions, limits, extensions, shader compiles. Needs no surface (EGL_KHR_surfaceless).
+void report_gl(const Egl& e)
+{
+    const int got = e.es;
     rep(true, "[INFO] GL_VERSION: %s", glGetString(GL_VERSION));
     rep(true, "[INFO] GL_RENDERER: %s", first_line((const char*)glGetString(GL_RENDERER), 80).c_str());
     rep(false, "GL_VENDOR: %s", glGetString(GL_VENDOR));
@@ -265,7 +283,19 @@ void render_thread(winrt::Windows::UI::Core::CoreWindow window)
                      "void main() { gl_Position = gl_in[0].gl_Position; EmitVertex(); EndPrimitive(); }\n");
     }
 
-    // Frames: clear to a colour that changes every frame, at the display's rate.
+}
+
+// Draws: clear to a colour that changes every frame, at the display's rate. Runs on its own thread, which takes the
+// context from the UI thread.
+void frame_loop(Egl e)
+{
+    if (!eglMakeCurrent(e.dpy, e.surf, e.surf, e.ctx)) {
+        rep(true, "[FAIL] eglMakeCurrent on the render thread: error 0x%X", eglGetError());
+        g_ready = true;
+        return;
+    }
+    const EGLDisplay dpy = e.dpy;
+    const EGLSurface surf = e.surf;
     eglSwapInterval(dpy, 1);
     LARGE_INTEGER freq, t0, t;
     QueryPerformanceFrequency(&freq);
@@ -297,15 +327,31 @@ void render_thread(winrt::Windows::UI::Core::CoreWindow window)
     }
 }
 
+}
+
 }  // namespace
 
-// Starts the render thread, waits for its report, and leaves it drawing for as long as the app runs.
+// Sets up EGL on this (the UI) thread, reports, then hands the context to a render thread that keeps drawing for as
+// long as the app runs.
 void run_angle_probe(winrt::Windows::UI::Core::CoreWindow const& window)
 {
     rep(true, "--- ANGLE (OpenGL ES on D3D11) ---");
-    std::thread([window] { render_thread(window); }).detach();
+    Egl e;
+    if (!setup_egl(window, e))
+        return;
+    // Without a surface the context still works (EGL_KHR_surfaceless): the report does not need one.
+    if (eglMakeCurrent(e.dpy, e.surf, e.surf, e.ctx) || eglMakeCurrent(e.dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, e.ctx)) {
+        report_gl(e);
+        eglMakeCurrent(e.dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    } else {
+        rep(true, "[FAIL] eglMakeCurrent: error 0x%X", eglGetError());
+        return;
+    }
+    if (e.surf == EGL_NO_SURFACE)
+        return;
+    std::thread([e] { frame_loop(e); }).detach();
     for (int i = 0; i < 400 && !g_ready; i++)  // 20 s
         Sleep(50);
     if (!g_ready)
-        rep(true, "[FAIL] the ANGLE probe did not finish in 20 s");
+        rep(true, "[FAIL] no frames in 20 s");
 }
