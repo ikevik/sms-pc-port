@@ -3,9 +3,11 @@
 # libGLESv2.dll, d3dcompiler_47.dll), lib/ (import libraries), include/ (EGL, GLES2, GLES3, KHR),
 # ANGLE_REF.txt, RESULT.txt and the logs.
 #
-# The checkout and the build take more than a hosted job's 60 minutes, so D:\angle (the checkout and
-# its out\uwp) is cached between runs. Each run restores the newest cache for the ref, builds for about
-# 35 minutes and saves what it has; run the pipeline again until RESULT.txt says COMPLETE.
+# Time: a hosted job in a private Azure DevOps project stops at 60 minutes, which the checkout and the
+# build exceed. Either make the project public (the job limit is then 360 minutes, with more cores; set
+# ninjaMinutes to about 300), or keep it private, tick useCache and run the pipeline again until
+# RESULT.txt says COMPLETE: the checkout and out\uwp are then saved between runs. (The cache task has
+# crashed on the first miss in this project, hence it is off by default.)
 trigger: none
 pr: none
 
@@ -14,27 +16,36 @@ parameters:
   displayName: ANGLE branch, tag or commit
   type: string
   default: main
+- name: ninjaMinutes
+  displayName: Minutes to build before stopping (private project: 35)
+  type: number
+  default: 35
+- name: useCache
+  displayName: Cache the checkout and build between runs
+  type: boolean
+  default: false
 
 jobs:
 - job: angle_uwp
   displayName: ANGLE for UWP x64
-  timeoutInMinutes: 60
+  timeoutInMinutes: 360
   pool:
     vmImage: windows-2022
   steps:
   - checkout: self
     fetchDepth: 1
 
-  - task: Cache@2
-    displayName: Restore ANGLE's checkout and build output
-    inputs:
-      key: 'angle | "$(Agent.OS)" | ${{ parameters.angleRef }} | $(Build.BuildId)'
-      restoreKeys: |
-        angle | "$(Agent.OS)" | ${{ parameters.angleRef }}
-      path: $(Pipeline.Workspace)\angle
-    continueOnError: true
+  - ${{ if eq(parameters.useCache, true) }}:
+    - task: Cache@2
+      displayName: Restore ANGLE's checkout and build output
+      inputs:
+        key: 'angle | "$(Agent.OS)" | ${{ parameters.angleRef }} | $(Build.BuildId)'
+        restoreKeys: |
+          angle | "$(Agent.OS)" | ${{ parameters.angleRef }}
+        path: $(Pipeline.Workspace)\angle
+      continueOnError: true
 
-  - powershell: ./tools/ci/build_angle.ps1 -Ref '${{ parameters.angleRef }}' -TimeoutMin 35 -Tree '$(Pipeline.Workspace)\angle'
+  - powershell: ./tools/ci/build_angle.ps1 -Ref '${{ parameters.angleRef }}' -TimeoutMin ${{ parameters.ninjaMinutes }} -Tree '$(Pipeline.Workspace)\angle'
     displayName: Fetch and build ANGLE
     continueOnError: true
 
