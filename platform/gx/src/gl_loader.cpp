@@ -35,6 +35,75 @@ static CallCount s_counts[256];
 static int s_nCounts = 0;
 #endif
 
+#ifdef SMS_GX_UWP_ANGLE
+// SMS_GX_GLCHECK=1 (UWP build): every GL entry point is followed by a glGetError, and the first errors of each call are
+// logged with the caller's stack (sms.exe+RVA, for sms.map) and, for draws, what glValidateProgram says of the program.
+// ANGLE's GL_KHR_debug messages never came, so this finds the calls that fail. With SMS_GX_GL_THREAD=0 the calls run on the
+// game's thread and the stack shows who made them; with the GL thread, the thread that executes the queue.
+extern "C" void port_uwp_backtrace_text(char* out, size_t size, int skip, int count);  // src/win_posix/uwp_stubs.cpp
+namespace {
+unsigned (*s_rawGetError)();
+void (*s_rawGetIntegerv)(unsigned, int*);
+void (*s_rawValidate)(unsigned);
+void (*s_rawGetProgramiv)(unsigned, unsigned, int*);
+void (*s_rawGetProgramInfoLog)(unsigned, int, int*, char*);
+struct ErrSeen {
+    const char* name;
+    unsigned err;
+    int n;
+};
+ErrSeen s_errSeen[96];
+int s_nErrSeen = 0;
+
+void reportGlErrors(const char* name) {
+    for (int k = 0; k < 4; k++) {
+        const unsigned err = s_rawGetError();
+        if (err == 0) return;
+        ErrSeen* seen = nullptr;
+        for (int i = 0; i < s_nErrSeen; i++)
+            if (s_errSeen[i].name == name && s_errSeen[i].err == err) seen = &s_errSeen[i];
+        if (!seen && s_nErrSeen < 96) {
+            seen = &s_errSeen[s_nErrSeen++];
+            *seen = ErrSeen{name, err, 0};
+        }
+        if (!seen || seen->n++ >= 2) continue;  // the first two of each call and error
+        char stack[1000];
+        port_uwp_backtrace_text(stack, sizeof stack, 2, 14);
+        gx::logmsg("[GLCHECK] %s raised 0x%X (#%d)\n    at %s", name, err, seen->n, stack);
+        if (!strncmp(name, "glDraw", 6) || !strncmp(name, "glMultiDraw", 11)) {
+            int prog = 0;
+            s_rawGetIntegerv(0x8B8D /* GL_CURRENT_PROGRAM */, &prog);
+            if (prog) {
+                s_rawValidate(unsigned(prog));
+                int ok = 0;
+                char log[600] = {0};
+                s_rawGetProgramiv(unsigned(prog), 0x8B83 /* GL_VALIDATE_STATUS */, &ok);
+                s_rawGetProgramInfoLog(unsigned(prog), sizeof log, nullptr, log);
+                gx::logmsg("[GLCHECK]   program %d: validate %s: %s", prog, ok ? "ok" : "failed", log);
+                while (s_rawGetError() != 0) {}
+            } else {
+                gx::logmsg("[GLCHECK]   no program in use");
+            }
+        }
+    }
+}
+}  // namespace
+
+template <typename F> struct Checked;
+template <typename R, typename... A> struct Checked<R (*)(A...)> {
+    template <R (**Real)(A...), const char* const* Name> static R call(A... a) {
+        if constexpr (std::is_void<R>::value) {
+            (*Real)(a...);
+            reportGlErrors(*Name);
+        } else {
+            R r = (*Real)(a...);
+            reportGlErrors(*Name);
+            return r;
+        }
+    }
+};
+#endif
+
 // Logs the entry points called most since the previous call (SMS_GX_STATS).
 void logTopCalls(uint32_t frames) {
 #if !(defined(_WIN32) && !defined(_WIN64))
@@ -70,6 +139,28 @@ bool load(void* (*getProc)(const char*)) {
 #define SMS_GX_LOAD_OPTIONAL(type, name) gx_##name = reinterpret_cast<type>(getProc(#name));
     SMS_GX_GL_OPTIONAL_FUNCS(SMS_GX_LOAD_OPTIONAL)
 #undef SMS_GX_LOAD_OPTIONAL
+#ifdef SMS_GX_UWP_ANGLE
+    if (getenv("SMS_GX_GLCHECK")) {
+        s_rawGetError = reinterpret_cast<unsigned (*)()>(getProc("glGetError"));
+        s_rawGetIntegerv = reinterpret_cast<void (*)(unsigned, int*)>(getProc("glGetIntegerv"));
+        s_rawValidate = reinterpret_cast<void (*)(unsigned)>(getProc("glValidateProgram"));
+        s_rawGetProgramiv = reinterpret_cast<void (*)(unsigned, unsigned, int*)>(getProc("glGetProgramiv"));
+        s_rawGetProgramInfoLog = reinterpret_cast<void (*)(unsigned, int, int*, char*)>(getProc("glGetProgramInfoLog"));
+        if (s_rawGetError && s_rawGetIntegerv && s_rawValidate && s_rawGetProgramiv && s_rawGetProgramInfoLog) {
+#define SMS_GX_CHECK(type, name)                                                                         \
+            if (strcmp(#name, "glGetError")) {                                                           \
+                static type real_##name;                                                                 \
+                static const char* const nm_##name = #name;                                              \
+                real_##name = gx_##name;                                                                 \
+                if (real_##name) gx_##name = &Checked<type>::template call<&real_##name, &nm_##name>;    \
+            }
+            SMS_GX_GL_FUNCS(SMS_GX_CHECK)
+            SMS_GX_GL_OPTIONAL_FUNCS(SMS_GX_CHECK)
+#undef SMS_GX_CHECK
+            gx::logmsg("GL call checking on (SMS_GX_GLCHECK)");
+        }
+    }
+#endif
 #if !(defined(_WIN32) && !defined(_WIN64))
     if (getenv("SMS_GX_STATS")) {
 #define SMS_GX_WRAP(type, name)                                   \

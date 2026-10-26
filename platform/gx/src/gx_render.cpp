@@ -3730,7 +3730,7 @@ void frameProbe(int w, int h, unsigned frame, int presented) {
         if (err == GL_NO_ERROR) break;
         if (errorsLogged++ < 30) logmsg("[ES] glGetError 0x%X at frame %u", (unsigned)err, frame);
     }
-    if (!(frame < 4 || frame % 300 == 0) || probes >= 14) return;
+    if (!(frame < 4 || frame % 150 == 0) || probes >= 24) return;
     probes++;
     GLint fbo = -1;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
@@ -3744,8 +3744,10 @@ void frameProbe(int w, int h, unsigned frame, int presented) {
             len += snprintf(line + len, sizeof line - size_t(len), " %02x%02x%02x", px[0], px[1], px[2]);
         }
     logmsg("%s", line);
-    logmsg("[ES] frame %u: the game's last display frame drew %u batches, %u vertices, %u texture uploads, %u EFB copies", frame,
-           s_lastFrameStats.draws, s_lastFrameStats.vertices, s_lastFrameStats.textureUploads, s_lastFrameStats.efbCopies);
+    logmsg("[ES] frame %u: the game's last display frame drew %u batches, %u vertices, %u texture uploads, %u EFB copies; "
+           "so far %u shaders compiled, %u texture uploads",
+           frame, s_lastFrameStats.draws, s_lastFrameStats.vertices, s_lastFrameStats.textureUploads, s_lastFrameStats.efbCopies,
+           (unsigned)g_statShaderCompiles, (unsigned)g_statTexUploads);
     // the same points in the picture handed to the present (the XFB's texture) and in the EFB's colour texture: black
     // here and not in the XFB means the present's draw is the fault; black in the XFB means the game's own drawing (or
     // the copy into the XFB) is

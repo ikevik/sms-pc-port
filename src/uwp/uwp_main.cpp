@@ -67,6 +67,17 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
         CoreApplication::Suspending([](auto&&, auto&&) { fprintf(stderr, "[uwp] the system is suspending the app\n"); });
         CoreApplication::Resuming([](auto&&, auto&&) { fprintf(stderr, "[uwp] the app is resuming\n"); });
         CoreApplication::Exiting([](auto&&, auto&&) { fprintf(stderr, "[uwp] the app is exiting\n"); });
+        // The system ends an app that goes over its memory limit without a word to the app; these say how close it came.
+        using Windows::System::MemoryManager;
+        MemoryManager::AppMemoryUsageLimitChanging([](auto&&, Windows::System::AppMemoryUsageLimitChangingEventArgs const& a) {
+            fprintf(stderr, "[uwp] memory limit changing: %llu to %llu MiB (now using %llu MiB)\n",
+                    (unsigned long long)(a.OldLimit() >> 20), (unsigned long long)(a.NewLimit() >> 20),
+                    (unsigned long long)(MemoryManager::AppMemoryUsage() >> 20));
+        });
+        MemoryManager::AppMemoryUsageIncreased([](auto&&, auto&&) {
+            fprintf(stderr, "[uwp] memory use level up: %d (%llu MiB)\n", (int)MemoryManager::AppMemoryUsageLevel(),
+                    (unsigned long long)(MemoryManager::AppMemoryUsage() >> 20));
+        });
     }
     void Load(hstring const&) {}
     void Uninitialize() { fprintf(stderr, "[uwp] the view is uninitialized\n"); }
@@ -165,6 +176,28 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
                         frames, frames - lastFrames, usage, limit);
                 last = now;
                 lastFrames = frames;
+            }
+        }).detach();
+
+        // Memory sampled four times a second, a line when it moved by 16 MiB or more: the 5 s heartbeat can miss a climb that
+        // ends the app between two lines.
+        std::thread([] {
+            unsigned long long lastShown = 0, peak = 0;
+            for (;;) {
+                Sleep(250);
+                unsigned long long usage = 0;
+                try {
+                    usage = Windows::System::MemoryManager::AppMemoryUsage() >> 20;
+                } catch (...) {
+                    continue;
+                }
+                if (usage > peak)
+                    peak = usage;
+                if (usage + 16 <= lastShown || usage >= lastShown + 16) {
+                    fprintf(stderr, "[uwp] memory %llu MiB (peak %llu), retrace %u, pictures %u\n", usage, peak, VIGetRetraceCount(),
+                            GXPC_FrameCount());
+                    lastShown = usage;
+                }
             }
         }).detach();
 

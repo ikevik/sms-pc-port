@@ -6,7 +6,10 @@
 
 #include <io.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include <exception>
 
 #include "os/crash.h"
 #include "pad/gc_adapter.h"
@@ -155,6 +158,25 @@ LONG WINAPI onUnhandled(PEXCEPTION_POINTERS exception)
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+// The C runtime ends a process at once, with no exception, for a call it finds invalid (a closed file descriptor, a
+// bad mode string, a format it rejects): the vectored handler never sees it. Logging it and returning lets the call fail
+// with EINVAL, as it does in the desktop build's runtime.
+void __cdecl onInvalidParameter(const wchar_t* expression, const wchar_t* function, const wchar_t* file, unsigned line, uintptr_t)
+{
+    char text[600];
+    snprintf(text, sizeof text, "\n[port] the C runtime rejected a call: %ls in %ls (%ls:%u), thread %lu\n", expression ? expression : L"?",
+             function ? function : L"?", file ? file : L"?", line, GetCurrentThreadId());
+    put(text);
+    backtrace(nullptr);
+}
+
+void onTerminate()
+{
+    put("\n[port] std::terminate: an exception nothing caught, or a throw from a noexcept function\n");
+    backtrace(nullptr);
+    abort();
+}
+
 }  // namespace
 
 // The backtrace of the calling thread as text, for diagnostics elsewhere (the GL debug messages).
@@ -206,6 +228,8 @@ void port_install_windows_exception_logger()
     if (!add)
         add = (AddVectored)GetProcAddress(ntdll, "RtlAddVectoredExceptionHandler");
     SetUnhandled setUnhandled = (SetUnhandled)GetProcAddress(kernel, "SetUnhandledExceptionFilter");
+    _set_invalid_parameter_handler(onInvalidParameter);
+    std::set_terminate(onTerminate);
     const bool vectored = add && add(1, onException);
     if (setUnhandled)
         setUnhandled(onUnhandled);
