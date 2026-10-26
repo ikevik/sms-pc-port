@@ -15,7 +15,7 @@ parameters:
 - name: angleRef
   displayName: ANGLE branch, tag or commit
   type: string
-  default: f563ee491c2e42fa8958bf4db5a8d1ca3ad27b74   # a commit that got through gn and 417 of 423 build steps; main moves
+  default: 39087422740112ef2f3be57a6af1ed8399459f69   # the commit that built completely (libEGL and libGLESv2); main moves
 - name: ninjaMinutes
   displayName: 'Minutes to build before stopping (private project: 35)'
   type: number
