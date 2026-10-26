@@ -327,8 +327,6 @@ void frame_loop(Egl e)
     }
 }
 
-}
-
 }  // namespace
 
 // Sets up EGL on this (the UI) thread, reports, then hands the context to a render thread that keeps drawing for as
