@@ -84,6 +84,27 @@ Set-Location $tree
 $commit = git rev-parse HEAD
 Say "ANGLE at $commit"
 
+# Chromium's build files pin one Windows SDK version (setup_toolchain.py: SDK_VERSION) and ask vcvarsall for
+# it, whether or not the runner has it. Use the newest complete SDK that is installed instead.
+$setup = "$tree\build\toolchain\win\setup_toolchain.py"
+$pin = [regex]::Match((Get-Content $setup -Raw), "SDK_VERSION\s*=\s*'(10\.0\.\d+\.0)'").Groups[1].Value
+$have = (Get-ChildItem "$kits\Include" -Directory | Where-Object { Test-Path "$($_.FullName)\um\Windows.h" } |
+  Sort-Object { [version]$_.Name } | Select-Object -Last 1).Name
+$patched = @()
+if ($pin -and $have -and $pin -ne $have) {
+  Say "the build files pin Windows SDK $pin; using the installed $have"
+  $utf8 = New-Object Text.UTF8Encoding($false)
+  foreach ($f in Get-ChildItem "$tree\build" -Recurse -File -Include *.py, *.gni, *.gn, *.json -ErrorAction SilentlyContinue) {
+    if (Select-String -Path $f.FullName -SimpleMatch $pin -Quiet) {
+      [IO.File]::WriteAllText($f.FullName, [IO.File]::ReadAllText($f.FullName).Replace($pin, $have), $utf8)
+      $patched += $f.FullName.Substring($tree.Length + 1)
+    }
+  }
+  $patched | Set-Content "$out\sdk-patched.log"
+} else {
+  Say "Windows SDK pinned by the build files: '$pin'; newest complete installed: '$have'"
+}
+
 # UWP disables D3D9, desktop GL and Vulkan itself (gni/angle.gni); only the D3D11 backend remains.
 New-Item -ItemType Directory -Force out\uwp | Out-Null
 @'
