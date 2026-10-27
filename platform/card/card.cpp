@@ -132,8 +132,14 @@ bool write_file(const std::string& path, const void* data, size_t size)
 {
 	const std::string tmp = path + ".tmp";
 	FILE* fp              = fopen(tmp.c_str(), "wb");
-	if (!fp)
+	if (!fp) {
+		static bool told;
+		if (!told) {
+			told = true;
+			port_log("[card] could not open %s for writing: %s\n", tmp.c_str(), strerror(errno));
+		}
 		return false;
+	}
 	const bool ok = fwrite(data, 1, size, fp) == size && fflush(fp) == 0;
 	if (fclose(fp) != 0 || !ok) {
 		remove(tmp.c_str());

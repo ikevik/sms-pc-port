@@ -145,6 +145,11 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
         sms_uwp_input_register();
         fprintf(stderr, "[uwp] ANGLE window context: %s\n", attached ? "ready" : "not created (see above)");
 
+        // The memory card, and the save states and menu settings beside it, live under LocalState: %APPDATA% here is the
+        // user's own Roaming folder, which an app container cannot write to (the card's files were never made). Forward
+        // slashes, as the card makes the folders one step at a time. env.txt below can still name another place.
+        _putenv_s("SMS_SAVE_DIR", (dir + "/sms-port/card-a").c_str());
+
         // env.txt (optional): NAME=VALUE lines set as environment variables for the game, for trying its settings
         // without a new build, e.g. SMS_GX_SHADER_WARMUP=off or SMS_GX_SCALE=1.
         {
