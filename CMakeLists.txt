@@ -17,7 +17,7 @@ endif()
 
 # UWP (Xbox Dev Mode): the store family of Windows APIs, AppContainer, WindowsApp.lib in place of
 # kernel32 and the rest. Needs the store environment (vcvarsall x64 uwp). SDL2 has no clang-buildable
-# WinRT backend, so this build has no window, audio or pad yet: it exists to list what fails to build.
+# WinRT backend: the window, pad and sound are src/uwp (ANGLE through gx_uwp_egl.cpp, Windows.Gaming.Input, XAudio2).
 option(SMS_UWP "Target UWP (needs SMS_MSVC_TARGET)" OFF)
 if(SMS_UWP)
   if(NOT SMS_MSVC_TARGET)
@@ -464,10 +464,14 @@ if(SMS_MSVC_TARGET)
   target_compile_definitions(sms PRIVATE SMS_PLATFORM_UNIT=1)
   if(SMS_UWP)
     target_sources(sms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/win_posix/uwp_stubs.cpp
-                   ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_input.cpp)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_input.cpp
+                   ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_audio.cpp)
     # The WinRT entry (C++/WinRT needs C++17 or later) starts the game's main, renamed here.
     set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_input.cpp
+                                ${CMAKE_CURRENT_SOURCE_DIR}/src/uwp/uwp_audio.cpp
                                 PROPERTIES COMPILE_OPTIONS "-std=gnu++20")
+    # The audio output (src/uwp/uwp_audio.cpp): XAudio2 2.9, a system DLL a UWP app may import.
+    target_link_libraries(sms PRIVATE xaudio2.lib)
     set_source_files_properties(${SMS_PORT_SRC}/port_main.cpp PROPERTIES COMPILE_DEFINITIONS "main=sms_game_main")
   endif()
 endif()

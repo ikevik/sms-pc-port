@@ -92,4 +92,15 @@ manifest needs no new capability. The rising package version keeps `LocalState` 
 2. Probe with an ANGLE context (section 3): the first colour on screen, and the extension list.
 3. `gx_uwp_egl.cpp` and `MODE_ANGLE_WINDOW`: a context for the renderer, a black frame, the game's logs.
 4. Shaders, then features from section 4, in the order the logs complain.
-5. Input (`Windows.Gaming.Input`) and audio (XAudio2), which do not wait for any of this.
+5. Input (`Windows.Gaming.Input`, `src/uwp/uwp_input.cpp`) and audio (XAudio2, `src/uwp/uwp_audio.cpp`): both done.
+
+## Notes from running on the console
+
+- OpenGL ES 3.0 cannot read depth back with `glReadPixels` (colour formats only). `GXPeekZ`, which the sun's lens-flare
+  test uses 17 times a frame, draws the EFB depth texture as colour with the EFB copy shader's Z24X8 mode into the peek
+  buffer and reads that (`peekSource`, `depthFromRgba` in `gx_render.cpp`).
+- Audio: `ai.cpp` fills its FIFO as on every host and drains it through the same callback the SDL output uses; on UWP
+  `uwp_audio.cpp` calls it from an XAudio2 streaming thread (32 kHz stereo, four 512-frame buffers, the mastering voice
+  does the rate conversion). The engine is stopped and started around a suspend, and rebuilt if the device is lost.
+- The B button is the system's Back on an Xbox. The app marks the back request handled and swallows the gamepad-B key
+  events, so B reaches the game; the Xbox button is the way out.

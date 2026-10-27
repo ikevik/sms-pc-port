@@ -6,8 +6,8 @@
 //   game.iso (or game.gcm, game.ciso)   the GMSE01 Rev 0 disc image, passed as SMS_DISC_IMAGE
 //   args.txt (optional)                 one command-line argument per line
 //
-// There is no window, audio or controller backend yet (SDL2 has no clang-buildable WinRT port),
-// so this shows what the game's code does on the console before any of those exist.
+// SDL2 has no clang-buildable WinRT port, so the window is the CoreWindow (an ANGLE surface, gx_uwp_egl.cpp), the
+// controller is Windows.Gaming.Input (uwp_input.cpp) and the sound is XAudio2 (uwp_audio.cpp).
 #include <windows.h>
 
 #include <winrt/Windows.ApplicationModel.h>
@@ -35,6 +35,8 @@ extern "C" unsigned int VIGetRetraceCount(void);  // platform/vi/vi.cpp
 extern "C" unsigned int GXPC_FrameCount(void);    // platform/gx/src/gx_platform.cpp: pictures presented
 extern "C" int GXPC_UwpAttachWindow(void* coreWindow);       // platform/gx/src/gx_uwp_egl.cpp
 void sms_uwp_input_register();                           // src/uwp/uwp_input.cpp: the Xbox controller
+extern "C" void sms_uwp_audio_suspend();                 // src/uwp/uwp_audio.cpp: XAudio2's engine around a suspend
+extern "C" void sms_uwp_audio_resume();
 
 namespace {
 
@@ -64,8 +66,14 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
     // What the system does to the app goes in the log: a process that is suspended and then ended leaves no other trace.
     void Initialize(CoreApplicationView const&)
     {
-        CoreApplication::Suspending([](auto&&, auto&&) { fprintf(stderr, "[uwp] the system is suspending the app\n"); });
-        CoreApplication::Resuming([](auto&&, auto&&) { fprintf(stderr, "[uwp] the app is resuming\n"); });
+        CoreApplication::Suspending([](auto&&, auto&&) {
+            fprintf(stderr, "[uwp] the system is suspending the app\n");
+            sms_uwp_audio_suspend();
+        });
+        CoreApplication::Resuming([](auto&&, auto&&) {
+            fprintf(stderr, "[uwp] the app is resuming\n");
+            sms_uwp_audio_resume();
+        });
         CoreApplication::Exiting([](auto&&, auto&&) { fprintf(stderr, "[uwp] the app is exiting\n"); });
         // The system ends an app that goes over its memory limit without a word to the app; these say how close it came.
         using Windows::System::MemoryManager;

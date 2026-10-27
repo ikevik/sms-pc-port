@@ -9,8 +9,9 @@
 // runs in interrupt context on the emulated CPU.
 //
 // Output: SDL2 audio (loaded with dlopen, so builds without the GX layer still
-// link) at 32 kHz; the SDL callback drains the FIFO and kicks the CPU when it
-// runs low (three blocks queued, 52 ms, or up to eight after the output ran
+// link) at 32 kHz (XAudio2 on the UWP build, src/uwp/uwp_audio.cpp, which calls the
+// same callback from a thread of its own); the SDL callback drains the FIFO and kicks
+// the CPU when it runs low (three blocks queued, 52 ms, or up to eight after the output ran
 // dry). Without a device (headless, SMS_AUDIO_OUT=null, SDL failure, or no
 // answer from the sound server within SMS_AUDIO_OPEN_TIMEOUT seconds) a host
 // timer paces blocks at the DAC rate. SMS_AUDIO_WAV=path also records
@@ -52,6 +53,11 @@
 extern "C" int port_audio_dsp_frame_pending(void) __attribute__((weak));
 extern "C" int GXPC_GetSpeed(void) __attribute__((weak));
 extern "C" void port_dtk_mix(s16* lr, size_t frames, u32 outRate);
+#ifdef SMS_UWP
+// src/uwp/uwp_audio.cpp: XAudio2 plays what the output callback fills.
+extern "C" int sms_uwp_audio_open(void (*fill)(void*, uint8_t*, int), unsigned rate, int timeoutSeconds, char* error,
+                                  size_t errorSize);
+#endif
 
 namespace {
 
@@ -465,6 +471,20 @@ bool open_sdl()
 	return true;
 }
 
+#ifdef SMS_UWP
+bool open_xaudio2()
+{
+	const char* e     = getenv("SMS_AUDIO_OPEN_TIMEOUT");
+	const int seconds = e && *e ? std::max(0, atoi(e)) : 5;
+	char error[256]   = "";
+	if (!sms_uwp_audio_open(sdl_callback, kRate, seconds, error, sizeof error)) {
+		port_log("[audio] %s\n", error);
+		return false;
+	}
+	return true;
+}
+#endif
+
 // SMS_MUSIC_VOLUME / SMS_SFX_VOLUME (0..100): where a volume class starts. The mixer applies it
 // whatever the output (a device, SMS_AUDIO_WAV, none), unlike SMS_VOLUME, which scales the device's stream.
 void init_class_volume(const char* env, int cls, const char* name)
@@ -515,7 +535,11 @@ void init_output()
 		port_log("[audio] deterministic VI clock: AI DMA paced by retraces, no output device\n");
 		return;
 	}
+#ifdef SMS_UWP
+	g.sdl          = g.output && wantSdl && open_xaudio2();
+#else
 	g.sdl          = g.output && wantSdl && open_sdl();
+#endif
 	if (!g.sdl) {
 		if (g.output)
 			port_log("[audio] no audio device: pacing AI DMA from the host clock\n");

@@ -3279,12 +3279,28 @@ static void prefetchPeeks() {
         }
 }
 
+#ifdef SMS_GX_UWP_ANGLE
+static GLuint peekSource(bool depth);
+// The depth a depth peek reads is drawn as colour (peekDepthPass): red, green and blue hold its 24 bits, high byte first.
+// This gives what glReadPixels(GL_DEPTH_COMPONENT, GL_UNSIGNED_INT) gives, the depth in the top 24 bits.
+static uint32_t depthFromRgba(uint32_t p) { return (p & 0xFF) << 24 | ((p >> 8) & 0xFF) << 16 | ((p >> 16) & 0xFF) << 8; }
+#endif
+
 static uint32_t peekSync(int x, int y, bool depth) {
     glcInvalidate();
     GxTimer tw(&s_waitSeconds);
     s_syncReads++;
     uint32_t v = 0;
     uint8_t px[4] = {0, 0, 0, 0};
+#ifdef SMS_GX_UWP_ANGLE
+    if (depth) {  // OpenGL ES reads colour only: see peekDepthPass
+        if (x < 0 || y < 0 || x >= s_efbW || y >= EFB_H) return 0;
+        glBindFramebuffer(GL_FRAMEBUFFER, peekSource(true));
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+        return depthFromRgba(uint32_t(px[0]) | uint32_t(px[1]) << 8 | uint32_t(px[2]) << 16 | uint32_t(px[3]) << 24);
+    }
+#endif
     glBindFramebuffer(GL_FRAMEBUFFER, efbReadFbo(scaled(x), scaled(y), scaled(x) + 1, scaled(y) + 1,
                                                  depth ? GL_DEPTH_BUFFER_BIT : GL_COLOR_BUFFER_BIT));
     if (depth) {
@@ -3320,6 +3336,33 @@ static GLuint peekSource(bool depth) {
     }
     glDisable(GL_SCISSOR_TEST);
     const GLuint src = efbReadFbo(0, 0, INT32_MAX, INT32_MAX, bits);
+#ifdef SMS_GX_UWP_ANGLE
+    if (depth) {  // OpenGL ES cannot read depth back: draw it as colour into the same 1x buffer, and read that
+        glBindFramebuffer(GL_FRAMEBUFFER, s_peekFbo);
+        glViewport(0, 0, s_efbW, EFB_H);
+        glDisable(GL_BLEND);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_CLIP_DISTANCE0);
+        glDisable(GL_CLIP_DISTANCE0 + 1);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glUseProgram(s_copyProg);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, s_efbDepth);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, s_efbColor);
+        const float whole[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+        const float noSrc[4] = {0.0f, 0.0f, 0.0f, 0.0f};  // z = 0: a filtered read at the texel centres
+        glUniform4fv(s_copyURect, 1, whole);
+        glUniform4fv(s_copyUSrc, 1, noSrc);
+        glUniform1i(s_copyUMode, 32 | 6);  // the EFB copy's Z24X8: red, green, blue = bits 23-16, 15-8, 7-0
+        glUniform1i(s_copyUAlphaOne, 1);
+        glBindVertexArray(s_copyVao);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glBindVertexArray(s_vao);
+        return s_peekFbo;
+    }
+#endif
     glBindFramebuffer(GL_READ_FRAMEBUFFER, src);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_peekFbo);
     glBlitFramebuffer(0, 0, scaled(s_efbW), scaled(EFB_H), 0, 0, s_efbW, EFB_H, bits, GL_NEAREST);
@@ -3390,8 +3433,12 @@ static uint32_t peekRaw(int x, int y, bool depth) {
         glBufferData(GL_PIXEL_PACK_BUFFER, bytes, nullptr, GL_STREAM_READ);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, peekSource(depth));
         glPixelStorei(GL_PACK_ALIGNMENT, 4);
+#ifdef SMS_GX_UWP_ANGLE
+        glReadPixels(0, 0, s_efbW, EFB_H, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);  // depth was drawn as colour (peekSource)
+#else
         if (depth) glReadPixels(0, 0, s_efbW, EFB_H, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
         else glReadPixels(0, 0, s_efbW, EFB_H, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+#endif
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         glBindFramebuffer(GL_FRAMEBUFFER, s_efbFbo);
         now.fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -3410,6 +3457,9 @@ static uint32_t peekRaw(int x, int y, bool depth) {
         if (prev.map) {
             uint32_t v;
             memcpy(&v, prev.map + (size_t(y) * s_efbW + x) * 4, 4);
+#ifdef SMS_GX_UWP_ANGLE
+            if (depth) v = depthFromRgba(v);
+#endif
             return v;
         }
     }
