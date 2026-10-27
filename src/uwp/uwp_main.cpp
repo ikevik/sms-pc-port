@@ -149,6 +149,10 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
         // user's own Roaming folder, which an app container cannot write to (the card's files were never made). Forward
         // slashes, as the card makes the folders one step at a time. env.txt below can still name another place.
         _putenv_s("SMS_SAVE_DIR", (dir + "/sms-port/card-a").c_str());
+        // The pause menu's changes (graphics, gameplay, ...) are kept beside them and put back at the next start: there is
+        // no launcher on the console to keep them. Delete the file to go back to the defaults.
+        CreateDirectoryW((std::wstring(Windows::Storage::ApplicationData::Current().LocalFolder().Path()) + L"\\sms-port").c_str(), nullptr);
+        _putenv_s("SMS_MENU_SAVE", (dir + "/sms-port/menu-settings.txt").c_str());
 
         // env.txt (optional): NAME=VALUE lines set as environment variables for the game, for trying its settings
         // without a new build, e.g. SMS_GX_SHADER_WARMUP=off or SMS_GX_SCALE=1.

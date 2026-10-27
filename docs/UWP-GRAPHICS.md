@@ -102,5 +102,9 @@ manifest needs no new capability. The rising package version keeps `LocalState` 
 - Audio: `ai.cpp` fills its FIFO as on every host and drains it through the same callback the SDL output uses; on UWP
   `uwp_audio.cpp` calls it from an XAudio2 streaming thread (32 kHz stereo, four 512-frame buffers, the mastering voice
   does the rate conversion). The engine is stopped and started around a suspend, and rebuilt if the device is lost.
+- Saves and settings live under the app's `LocalState\sms-port` (Device Portal file explorer): `card-a` (the memory
+  card), `savestates`, `hud.txt`, and `menu-settings.txt`, the pause menu's changes in its own words (`msaa = 4x`),
+  put back when the game is drawing (`SMS_MENU_SAVE`, `port_settings_restore`). `%APPDATA%` in an app container is
+  the user's own Roaming folder, which the app cannot write to. Delete `menu-settings.txt` to go back to the defaults.
 - The B button is the system's Back on an Xbox. The app marks the back request handled and swallows the gamepad-B key
   events, so B reaches the game; the Xbox button is the way out.

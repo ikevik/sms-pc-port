@@ -30,6 +30,7 @@ extern "C" double port_idle_seconds(void);
 extern "C" void port_pad_autopress_field(u32 field);
 extern "C" __attribute__((weak)) void port_trace_on_retrace(uint32_t retrace_count);
 extern "C" __attribute__((weak)) void port_audio_on_retrace(void);
+extern "C" __attribute__((weak)) void port_settings_restore(void);
 
 namespace {
 std::atomic<u32> g_pending(0);
@@ -247,7 +248,14 @@ extern "C" s64 port_vi_virtual_ticks(void)
 extern "C" void VIInit(void) {}
 extern "C" void VIConfigure(GXRenderModeObj* rm) {}
 extern "C" void VIConfigurePan(u16, u16, u16, u16) {}
-extern "C" void VIFlush(void) { shots_poll(game_field(), g_next_fb); }
+extern "C" void VIFlush(void)
+{
+	shots_poll(game_field(), g_next_fb);
+	// The settings menu's kept changes (SMS_MENU_SAVE), put back once the game is drawing: from its fifth flush on.
+	static int flushes;
+	if (++flushes == 5 && port_settings_restore)
+		port_settings_restore();
+}
 extern "C" void VISetNextFrameBuffer(void* fb) { g_next_fb = fb; }
 extern "C" void VISetNextRightFrameBuffer(void*) {}
 extern "C" void VISetBlack(BOOL black) { g_black = black != 0; }

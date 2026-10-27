@@ -77,6 +77,10 @@ const PortSetting* port_settings_option(int page, int index);
 // game closes. The value names are what is saved, so a name the launcher does not know is not.
 int port_settings_set(const PortSetting* option, int value);
 
+// With SMS_MENU_SAVE naming a file, the menu's changes are also kept there in its own words (`msaa = 4x`), and this
+// puts them back once, when the game is drawing (called from platform/vi, VIFlush). For a machine with no launcher.
+void port_settings_restore(void);
+
 // The picture as it is now, as "2560 x 2112 with 4x MSAA", for the menu's footer.
 void port_gfx_describe(char* out, int size);
 

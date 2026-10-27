@@ -257,8 +257,11 @@ std::string launcherValue(const PortSetting* s, int index, const char* text) {
 
 std::vector<std::pair<std::string, std::string>> s_saved;  // id, the launcher's value; in the order first changed
 
+void remember(const PortSetting* s, const char* text);
+
 void record(const PortSetting* s, int index, const char* text) {
     if (!s->id) return;
+    remember(s, text);
     const std::string value = launcherValue(s, index, text);
     if (value.empty()) {
         port_log("[settings] %s: \"%s\" is not one of the launcher's values; not saved\n", s->id, text);
@@ -298,6 +301,55 @@ bool replaceFile(const std::string& from, const std::string& to) {
 #endif
 }
 
+// path written whole, through path.tmp
+bool writeWhole(const std::string& path, const std::string& text) {
+    const std::string temporary = path + ".tmp";
+    FILE* f = openFile(temporary);
+    bool ok = f && fwrite(text.data(), 1, text.size(), f) == text.size();
+    if (f) ok = fclose(f) == 0 && ok;
+    return ok && replaceFile(temporary, path);
+}
+
+FILE* openRead(const std::string& path) {
+#ifdef _WIN32
+    const int n = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0);
+    std::wstring wide(size_t(n > 0 ? n : 1), L'\0');
+    if (n <= 0 || !MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, &wide[0], n)) return nullptr;
+    return _wfopen(wide.c_str(), L"rb");
+#else
+    return fopen(path.c_str(), "rb");
+#endif
+}
+
+// ------------------------------------------------------------------ keeping the changes without the launcher
+// SMS_MENU_SAVE names a file where the menu's changes are kept in the menu's own words, one `id = value` line each,
+// the one changed last at the end, and put back when the next run is drawing (port_settings_restore). It is for a
+// machine with no launcher to keep them, a console, say. The launcher's file above is in the launcher's format and
+// is not read back. The HUD page keeps its own (hud.txt).
+std::vector<std::pair<std::string, std::string>> s_menu;  // id, the value's text
+
+void remember(const PortSetting* s, const char* text) {
+    if (!s->id || s == &kPreset || s->page == PORT_SETTINGS_PAGE_HUD) return;  // the preset's values are recorded one by one
+    for (size_t i = 0; i < s_menu.size(); i++)
+        if (s_menu[i].first == s->id) {
+            s_menu.erase(s_menu.begin() + long(i));
+            break;
+        }
+    s_menu.emplace_back(s->id, text);
+}
+
+void saveMenu() {
+    const char* path = getenv("SMS_MENU_SAVE");
+    if (!path || !*path || s_menu.empty()) return;
+    std::string text;
+    for (const auto& kept : s_menu) text += kept.first + " = " + kept.second + "\n";
+    static bool told;
+    if (!writeWhole(path, text) && !told) {
+        told = true;
+        port_log("[settings] could not keep the menu's changes in %s\n", path);
+    }
+}
+
 void save() {
     const char* path = getenv("SMS_SETTINGS_SAVE");
     if (!path || !*path || s_saved.empty()) return;
@@ -305,11 +357,7 @@ void save() {
     for (size_t i = 0; i < s_saved.size(); i++)
         text += (i ? ",\n    \"" : "\n    \"") + s_saved[i].first + "\": " + s_saved[i].second;
     text += "\n  }\n}\n";
-    const std::string temporary = std::string(path) + ".tmp";
-    FILE* f = openFile(temporary);
-    bool ok = f && fwrite(text.data(), 1, text.size(), f) == text.size();
-    if (f) ok = fclose(f) == 0 && ok;
-    ok = ok && replaceFile(temporary, path);
+    const bool ok = writeWhole(path, text);
     static bool told;
     if (!ok && !told) {
         told = true;
@@ -353,7 +401,49 @@ int port_settings_set(const PortSetting* s, int value) {
     }
     record(s, value, text.c_str());
     save();
+    saveMenu();
     return 1;
+}
+
+// Puts back what the menu's file (SMS_MENU_SAVE) keeps, once, from the game's thread when it is drawing: each
+// line is applied as the menu would apply it, so a graphics change runs between frames on the GL thread.
+void port_settings_restore(void) {
+    static bool done;
+    const char* path = getenv("SMS_MENU_SAVE");
+    if (done || !path || !*path) return;
+    done = true;
+    FILE* f = openRead(path);
+    if (!f) return;  // nothing kept yet
+    build();
+    char line[256];
+    int applied = 0;
+    while (fgets(line, sizeof line, f)) {
+        char* eq = strchr(line, '=');
+        if (!eq || line[0] == '#') continue;
+        char* end = eq;
+        while (end > line && (end[-1] == ' ' || end[-1] == '\t')) end--;
+        *end = 0;
+        char* value = eq + 1;
+        while (*value == ' ' || *value == '\t') value++;
+        size_t length = strlen(value);
+        while (length && (value[length - 1] == '\n' || value[length - 1] == '\r' || value[length - 1] == ' ')) value[--length] = 0;
+        const PortSetting* s = findById(line);
+        const int index = s ? valueNamed(s, value) : -1;
+        if (!s || (s->available && !s->available()) || index < 0) {
+            port_log("[settings] kept %s = %s: not an option here now; left out\n", line, value);
+            continue;
+        }
+        remember(s, value);  // stays in the file whatever the next change is
+        if (index == s->get()) continue;
+        if (s->set(index)) {
+            applied++;
+            port_log("[settings] put back %s = %s\n", line, value);
+        } else {
+            port_log("[settings] %s = %s was refused\n", line, value);
+        }
+    }
+    fclose(f);
+    port_log("[settings] %d kept change%s put back from %s\n", applied, applied == 1 ? "" : "s", path);
 }
 
 }  // extern "C"
