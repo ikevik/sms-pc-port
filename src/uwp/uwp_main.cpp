@@ -91,6 +91,22 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView> {
         w.Activated([](auto&&, WindowActivatedEventArgs const& a) {
             fprintf(stderr, "[uwp] window activation state %d\n", (int)a.WindowActivationState());
         });
+
+        // B is the system's Back on an Xbox, and an app that leaves it unhandled is sent to the background (the log showed the
+        // window hidden and the app suspended at each press). The game reads the controller through Windows.Gaming.Input, so
+        // B still reaches it; this only keeps the system from acting on it. The Xbox button stays the way out.
+        try {
+            SystemNavigationManager::GetForCurrentView().BackRequested([](auto&&, BackRequestedEventArgs const& a) {
+                a.Handled(true);
+                fprintf(stderr, "[uwp] back request (B) left to the game\n");
+            });
+        } catch (hresult_error const& e) {
+            fprintf(stderr, "[uwp] no back request handler: %ls\n", e.message().c_str());
+        }
+        const auto isB = [](Windows::System::VirtualKey k) { return k == Windows::System::VirtualKey::GamepadB; };
+        w.KeyDown([isB](auto&&, KeyEventArgs const& a) { if (isB(a.VirtualKey())) a.Handled(true); });
+        w.KeyUp([isB](auto&&, KeyEventArgs const& a) { if (isB(a.VirtualKey())) a.Handled(true); });
+        w.Dispatcher().AcceleratorKeyActivated([isB](auto&&, AcceleratorKeyEventArgs const& a) { if (isB(a.VirtualKey())) a.Handled(true); });
     }
 
     void Run()
