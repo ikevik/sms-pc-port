@@ -1,0 +1,17 @@
+{
+  "_comment": "ROM hacks that ship as an xdelta patch for the North American Super Mario Sunshine disc. tools/mods/romhack.py applies one to the player's own image and checks the result; SMS Launcher reads this file for its list. source_md5 is the disc the patch is made for, result_md5 the disc it makes. code_mod names the port's code-mod build option, if the hack carries Kuribo code (see docs/ROMHACKS.md).",
+  "romhacks": [
+    {
+      "id": "sunburn",
+      "name": "Super Mario Sunburn",
+      "author": "EpicWade",
+      "game_id": "GMSE03",
+      "source_md5": "0c6d2edae9fdf40dfc410ff1623e4119",
+      "result_md5": "04d9abf76675adcfaa6aa1dde6c40215",
+      "patch": "console.xdelta",
+      "iso": "Super Mario Sunburn.iso",
+      "code_mod": null,
+      "notes": "Kuribo code (win condition, back nozzle, Eclipse's Yoshi patches) is not ported yet; the patched disc's files and audio load as data."
+    }
+  ]
+}
