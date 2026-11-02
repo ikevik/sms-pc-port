@@ -19,6 +19,6 @@ To add a hack, add an entry to `romhacks.json` with the MD5 of the disc the patc
 
 | id | disc | state |
 | --- | --- | --- |
-| `sunburn` (Super Mario Sunburn) | GMSE03 | the patched disc is made and checked; its Kuribo code (win condition, back nozzle, Eclipse's Yoshi patches) is not ported to the native build yet |
+| `sunburn` (Super Mario Sunburn) | GMSE03 | the patched disc is made and checked; its code builds in with `SMS_SUNBURN=1 ./build.sh` ([SUNBURN.md](SUNBURN.md)) and the game boots; play-testing is not finished |
 
 A hack with code needs its Kuribo modules ported as for Eclipse ([ECLIPSE.md](ECLIPSE.md)); one that only changes data can be played once the port accepts its disc ID.

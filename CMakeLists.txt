@@ -393,6 +393,8 @@ file(GLOB_RECURSE SMS_PLATFORM_SOURCES CONFIGURE_DEPENDS
 list(FILTER SMS_PLATFORM_SOURCES EXCLUDE REGEX "/platform/gx/")
 # platform/mods/eclipse is built by cmake/eclipse.cmake, and only with SMS_ECLIPSE.
 list(FILTER SMS_PLATFORM_SOURCES EXCLUDE REGEX "/platform/mods/eclipse/")
+# platform/mods/sunburn is built into the same library, with SMS_SUNBURN.
+list(FILTER SMS_PLATFORM_SOURCES EXCLUDE REGEX "/platform/mods/sunburn/")
 list(FILTER SMS_PLATFORM_SOURCES EXCLUDE REGEX "/tests/")
 if(WIN32 OR APPLE)
   list(FILTER SMS_PLATFORM_SOURCES EXCLUDE REGEX "/platform/trace/trace\\.cpp$")

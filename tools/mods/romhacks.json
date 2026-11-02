@@ -10,8 +10,8 @@
       "result_md5": "04d9abf76675adcfaa6aa1dde6c40215",
       "patch": "console.xdelta",
       "iso": "Super Mario Sunburn.iso",
-      "code_mod": null,
-      "notes": "Kuribo code (win condition, back nozzle, Eclipse's Yoshi patches) is not ported yet; the patched disc's files and audio load as data."
+      "code_mod": "SMS_SUNBURN",
+      "notes": "Its Kuribo code is built into the port with SMS_SUNBURN=1 ./build.sh (docs/SUNBURN.md); the build boots it, play-testing is not finished."
     }
   ]
 }

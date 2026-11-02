@@ -41,6 +41,6 @@ The disc's other modules are BetterSunshineEngine and BetterSunshineMoveset (bot
 - `MirrorMode.kxe`, and the memory card banner and icons (blank here).
 - The module calls that normalise a `bool` argument of `TMarDirector::fireStartDemoCamera` from `TNerveBGDie::execute` (no effect natively).
 - The "Win Condition: All Shadow Mario" ending is read from a settings value only; what it changes beyond that value was not found in the module.
-- Not yet built or played: see the branch's commits for the state.
+- Built (macOS arm64) and booted: all nine of the module's patches and Eclipse's 29 Yoshi patches register and the game runs; the hooks have not been played through, and the memory card path with the `GMSE03` ID is untested.
 
 The module code is derived from Eclipse's (GPL-3.0) for the Yoshi patches; keep that licence when using it.
