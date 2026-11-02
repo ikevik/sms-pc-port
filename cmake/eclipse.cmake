@@ -191,6 +191,7 @@ ExternalProject_Add(sms_eclipse_build
     -DMOVESET_SRC=${SMS_ECLIPSE_SRC_DIR}/moveset
     -DSHI_SRC=${SMS_ECLIPSE_SRC_DIR}/shi -DPORT_MODS=${CMAKE_CURRENT_SOURCE_DIR}/platform/mods
     -DSMS_ARCH=${SMS_ARCH} ${_eclipse_platform_args}
+    -DSMS_SUNBURN=${SMS_SUNBURN}
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
   BUILD_BYPRODUCTS ${_eclipse_lib})
@@ -242,6 +243,9 @@ if(SMS_ECLIPSE_ABI_CHECK)
   add_custom_target(sms_abi_check ALL DEPENDS ${CMAKE_BINARY_DIR}/sms_abi_check.stamp)
 endif()
 target_compile_definitions(sms PRIVATE SMS_ECLIPSE=1)
+if(SMS_SUNBURN)
+  target_compile_definitions(sms PRIVATE SMS_SUNBURN=1)
+endif()
 # --defsym=name=target: name is another name for target (ld64: -alias).
 function(sms_eclipse_alias name target)
   if(APPLE)

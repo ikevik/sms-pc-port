@@ -32,7 +32,11 @@ sms_select_arch build
 bdir=$sms_build_dir
 cmake_args=()
 eclipse=${SMS_ECLIPSE:-0}
-if [[ "$eclipse" == 1 ]]; then
+if [[ "${SMS_SUNBURN:-0}" == 1 ]]; then
+  # Super Mario Sunburn's code, on Eclipse's mod support (docs/SUNBURN.md)
+  bdir+=-sunburn
+  cmake_args+=(-DSMS_SUNBURN=ON)
+elif [[ "$eclipse" == 1 ]]; then
   bdir+=-eclipse
   cmake_args+=(-DSMS_ECLIPSE=ON)
 fi

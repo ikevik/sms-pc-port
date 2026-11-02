@@ -1,0 +1,135 @@
+Reason: port: code-mod hooks for Super Mario Sunburn (sms_modhook.h): red coin, nozzle box, nozzle changes, starting nozzle, gate open test and the first scenario
+
+--- a/src/MoveBG/Item.cpp
++++ b/src/MoveBG/Item.cpp
+@@ -407,7 +407,15 @@
+ 
+ void TCoinRed::taken(THitActor* param_1)
+ {
++#ifdef TARGET_PC
++	// Super Mario Sunburn (retail 0x801BE454) counts a red coin in the stage's
++	// gold coin total as well.
++	SMS_MOD_CALLM(0x801BE454, TFlagManager, incFlag,
++	              TFlagManager::getInstance()->incFlag(0x60000, 1),
++	              TFlagManager::getInstance(), 0x60000, 1);
++#else
+ 	TFlagManager::getInstance()->incFlag(0x60000, 1);
++#endif
+ 
+ 	SMSGetMSound()->startSoundActor(MSD_SE_SY_RED_COIN_GET, &mPosition, 0,
+ 	                                nullptr, 0, 4);
+@@ -1730,10 +1738,20 @@
+ 		unk15C = false;
+ 
+ 	if (strcmp(mContainedNozzleName, "normal_nozzle_item") == 0) {
+-		mContainedNozzleType = TWaterGun::Hover;
+-		unk15E.r             = 0;
+-		unk15E.g             = 0;
+-		unk15E.b             = 0xFF;
++#ifdef TARGET_PC
++		// Super Mario Sunburn (retail 0x801BB308): the box's nozzle, colour and
++		// name (a back nozzle with New Game Plus); the call reads this from r30.
++		if (void* sms_mod_t_ = SMS_MOD_SITE(0x801BB308)) {
++			SMS_MOD_GPR(30, this);
++			((void (*)())sms_mod_t_)();
++		} else
++#endif
++		{
++			mContainedNozzleType = TWaterGun::Hover;
++			unk15E.r             = 0;
++			unk15E.g             = 0;
++			unk15E.b             = 0xFF;
++		}
+ 	} else if (strcmp(mContainedNozzleName, "rocket_nozzle_item") == 0) {
+ 		mContainedNozzleType = TWaterGun::Rocket;
+ 		unk15E.r             = 0xFF;
+--- a/src/MoveBG/ModelGate.cpp
++++ b/src/MoveBG/ModelGate.cpp
+@@ -24,6 +24,10 @@
+ #include <stdio.h>
+ #include <string.h>
+ 
++#ifdef TARGET_PC
++#include <sms_modhook.h>
++#endif
++
+ // rogue includes needed for matching sinit & bss
+ #include <M3DUtil/InfectiousStrings.hpp>
+ #include <MSound/MSSetSound.hpp>
+@@ -222,6 +226,11 @@
+ 		break;
+ 	}
+ 
++#ifdef TARGET_PC
++	// Super Mario Sunburn (retail 0x801EC858): a gate is open once Corona Mountain is beaten.
++	if (void* sms_mod_t_ = SMS_MOD_SITE(0x801EC858))
++		opened = ((unsigned (*)(unsigned))sms_mod_t_)(opened) != 0;
++#endif
+ 	if (opened == true) {
+ 		mFlags |= GATE_FLAG_ACTIVE;
+ 		offHitFlag(HIT_FLAG_NO_COLLISION);
+--- a/src/Player/WaterGun.cpp
++++ b/src/Player/WaterGun.cpp
+@@ -1307,7 +1307,12 @@
+ 	mNozzleList[Hover]         = &mNozzleHover;
+ 	mNozzleList[Turbo]         = &mNozzleTurbo;
+ 	mCurrentNozzle             = Spray;
++#ifdef TARGET_PC
++	// Super Mario Sunburn rewrites `li r8, 4` (retail 0x8026A3C8), which is what is stored here.
++	mSecondNozzle              = (u8)(SMS_MOD_WORD(0x8026A3C8, 0x39000004) & 0xFF);
++#else
+ 	mSecondNozzle              = Hover;
++#endif
+ 	mNozzleRocket.unk38C       = MSD_SE_PO_ROCKET_TRIGGER;
+ 	mNozzleTurbo.unk38C        = MSD_SE_PO_SNIPER_TRIGGER;
+ 	mNozzleDeform.mBomb.unk38C = MSD_SE_PO_SHOTGUN_TRIGGER;
+@@ -1673,11 +1678,28 @@
+ 			mSwitchToSecondNozzleProgress = 0.0f;
+ 		}
+ 	} else {
++#ifdef TARGET_PC
++		// Super Mario Sunburn (retail 0x8026A1F0): the store reads this from r31
++		// and the nozzle from r30.
++		if (void* sms_mod_t_ = SMS_MOD_SITE(0x8026A1F0)) {
++			SMS_MOD_GPR(31, this);
++			SMS_MOD_GPR(30, nozzleType);
++			((void (*)())sms_mod_t_)();
++		} else
++#endif
+ 		mSecondNozzle = nozzleType;
+ 		if (animate == true) {
+ 			mSwitchToSecondNozzleProgress = 1.0f;
+ 		}
+ 	}
++#ifdef TARGET_PC
++	// (retail 0x8026A204, as above)
++	if (void* sms_mod_t_ = SMS_MOD_SITE(0x8026A204)) {
++		SMS_MOD_GPR(31, this);
++		SMS_MOD_GPR(30, nozzleType);
++		((void (*)())sms_mod_t_)();
++	} else
++#endif
+ 	mCurrentNozzle = nozzleType;
+ 	WaterGunCurNozzle(this)->init();
+ 	if (nozzleType == Yoshi) {
+--- a/src/System/MarDirectorDirect.cpp
++++ b/src/System/MarDirectorDirect.cpp
+@@ -1489,8 +1489,17 @@
+ 	if (nextArea.unk1 == 0xff)
+ 		switch (nextArea.getStage()) {
+ 		case 1:
+-			unkE4         = 2;
++			unkE4 = 2;
++#ifdef TARGET_PC
++			// Super Mario Sunburn (retail 0x802976AC) ends the game with 70 shines
++			// (scenario 9); the mod gets the game's own choice to fall back on.
++			nextArea.unk1 = SMS_MOD_CALL_R(
++			    0x802976AC, unsigned char (*)(unsigned char, unsigned char),
++			    decideNextScenario(nextArea.getStage()), nextArea.getStage(),
++			    decideNextScenario(nextArea.getStage()));
++#else
+ 			nextArea.unk1 = decideNextScenario(nextArea.getStage());
++#endif
+ 			TFlagManager::getInstance()->setFlag(0x40003, 0);
+ 			break;
+ 
