@@ -4,6 +4,7 @@
     python3 tools/mods/bisect_patches.py --exe build/macos-arm64-sunburn/sms --iso DISC --list
     python3 tools/mods/bisect_patches.py --exe build/macos-arm64-sunburn/sms --iso DISC \\
         --disable green_mode.cpp,sunburn.cpp --save /tmp/bisect-1
+    python3 tools/mods/bisect_patches.py ... --disable all --except player.cpp --save /tmp/bisect-2
 
 To find which patches of a mod change the game, a patch can be switched off by its retail
 address (SMS_MOD_DISABLE, platform/mods/modhooks.cpp); this does it by source file. It starts
@@ -64,7 +65,9 @@ def main():
     ap.add_argument("--exe", required=True, help="the game build (sms)")
     ap.add_argument("--iso", required=True, help="the disc image to play")
     ap.add_argument("--list", action="store_true", help="only list the patches per source file")
-    ap.add_argument("--disable", default="", help="comma-separated source files whose patches go off")
+    ap.add_argument("--disable", default="", help="comma-separated source files whose patches go off; "
+                    "'all' for every patch (the mods' start-up code still runs)")
+    ap.add_argument("--except", dest="keep", default="", help="with 'all': source files whose patches stay on")
     ap.add_argument("--save", help="the save folder (SMS_SAVE_DIR); a new one for each run")
     ap.add_argument("--wait", type=int, default=40, help="seconds to wait for the patch list")
     args = ap.parse_args()
@@ -79,12 +82,24 @@ def main():
     names = [n.strip() for n in args.disable.split(",") if n.strip()]
     chosen = set()
     for name in names:
+        if name == "all":
+            for p in files:
+                chosen.update(files[p])
+            print("off: every patch (%d)" % len(chosen))
+            continue
         found = [p for p in files if matches(p, name)]
         if not found:
             sys.exit("no patches come from %r (--list shows the files)" % name)
         for p in found:
             chosen.update(files[p])
             print("off: %3d patches from %s" % (len(files[p]), p.split("eclipse-src/")[-1]))
+    for name in [n.strip() for n in args.keep.split(",") if n.strip()]:
+        found = [p for p in files if matches(p, name)]
+        if not found:
+            sys.exit("no patches come from %r (--list shows the files)" % name)
+        for p in found:
+            chosen.difference_update(files[p])
+            print("kept on: %3d patches from %s" % (len(files[p]), p.split("eclipse-src/")[-1]))
     env = dict(os.environ)
     if chosen:
         env["SMS_MOD_DISABLE"] = ",".join(sorted(chosen))
