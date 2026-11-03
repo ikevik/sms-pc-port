@@ -25,10 +25,9 @@ endforeach()
 file(GLOB MOVESET_SOURCES ${MOVESET_SRC}/src/*.cpp ${MOVESET_SRC}/src/*/*.cpp)
 file(GLOB ECLIPSE_SOURCES ${ECLIPSE_SRC}/src/*.c ${ECLIPSE_SRC}/src/*.cpp ${ECLIPSE_SRC}/src/*/*.c ${ECLIPSE_SRC}/src/*/*.cpp)
 if(SMS_SUNBURN)
-  # Super Mario Sunburn: its own module (platform/mods/sunburn) and Eclipse's Yoshi patches,
-  # which it carries, in place of the rest of Eclipse. Built as the "eclipse" module below.
-  set(ECLIPSE_SOURCES ${PORT_MODS}/sunburn/sunburn.cpp
-    ${ECLIPSE_SRC}/src/yoshi/green_mode.cpp ${ECLIPSE_SRC}/src/yoshi/common.cpp)
+  # Super Mario Sunburn: its own module (platform/mods/sunburn), nothing of Eclipse's. Built as the
+  # "eclipse" module below (the name of the target only).
+  set(ECLIPSE_SOURCES ${PORT_MODS}/sunburn/sunburn.cpp ${PORT_MODS}/sunburn/yoshi.cpp)
 endif()
 
 set(_shi ${SHI_SRC}/include ${SHI_SRC}/include/JSystem ${SHI_SRC}/include/Dolphin ${SHI_SRC}/include/SMS

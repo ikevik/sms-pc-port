@@ -51,11 +51,18 @@ if(SMS_SUNBURN)
   set(_moveset_revision "4f83dfe2dd0d2f7466e2e5f7afcc4b47967af20f")
 endif()
 set(_eclipse_repos
-  "eclipse|https://github.com/JoshuaMKW/super-mario-eclipse|792e14fa1583910673ddae7e85048c6ddb4ba700"
   # compiler/: a 764 MB Windows clang for building BSE for the GameCube.
   "bse|https://github.com/JoshuaMKW/BetterSunshineEngine|${_bse_revision}|compiler"
   "moveset|https://github.com/JoshuaMKW/BetterSunshineMoveset|${_moveset_revision}"
   "shi|https://github.com/JoshuaMKW/SunshineHeaderInterface|a0d858951e7fb22dce5304aa5c50287ecb0d6862")
+# Eclipse itself, for an Eclipse build; a Sunburn build has no use for it and fetches none of it
+# (its folder stays empty, which the fix-up tolerates in its lenient mode).
+if(NOT SMS_SUNBURN)
+  list(PREPEND _eclipse_repos
+    "eclipse|https://github.com/JoshuaMKW/super-mario-eclipse|792e14fa1583910673ddae7e85048c6ddb4ba700")
+else()
+  file(MAKE_DIRECTORY "${SMS_ECLIPSE_SRC_DIR}/eclipse")
+endif()
 
 # Downloads `refspec` (a revision, or revision:ref) of `url` into the
 # repository at `dir`, setting `result` to Git's exit code. A stalled

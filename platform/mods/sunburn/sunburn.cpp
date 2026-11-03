@@ -24,6 +24,8 @@
 
 using namespace BetterSMS;
 
+extern void adjustYoshiTongue(TMario *player, bool isMario);  // yoshi.cpp
+
 namespace {
 
 enum WinCondition { WIN_SEVENTY_SHINES, WIN_ALL_SHADOW_MARIO };
@@ -168,6 +170,7 @@ void initModule() {
     Stage::addInitCallback(openMareGate);
     Stage::addUpdateCallback(unlockNewGamePlus);
     Player::addUpdateCallback(applyNewGamePlus);
+    Player::addUpdateCallback(adjustYoshiTongue);
 }
 
 // --- patches to the retail game ----------------------------------------------------------

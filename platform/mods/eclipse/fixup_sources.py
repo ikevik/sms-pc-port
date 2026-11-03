@@ -731,6 +731,9 @@ def apply_patch(root, patch):
     for part in re.split(r"(?m)^--- a/", text)[1:]:
         name = part.split("\n", 1)[0].strip()
         path = os.path.join(root, name)
+        if not os.path.exists(path) and os.environ.get("SMS_FIXUP_LENIENT") == "1":
+            print("fixup_sources.py: skipped %s (not fetched for this build)" % name, file=sys.stderr)
+            continue
         with open(path, encoding="utf-8", errors="surrogateescape", newline="") as f:
             cur = f.read().replace("\r\n", "\n").split("\n")
         hunks = re.split(r"(?m)^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@.*\n", part)
