@@ -692,7 +692,12 @@ def apply(root, fixes, strict=False):
                 changed += n
                 groups[why][0] += n
     missed = [why for why, (n, opt) in groups.items() if n == 0 and not opt]
-    if strict and missed:
+    if strict and missed and os.environ.get("SMS_FIXUP_LENIENT") == "1":
+        # A game built on older sources than the rules were written for (Super Mario Sunburn's
+        # BetterSunshineEngine v4.0.0): a rule for code that is not there yet is not an error.
+        print("fixup_sources.py: in %s, nothing matched (older source?) for: %s" % (root, "; ".join(missed)),
+              file=sys.stderr)
+    elif strict and missed:
         sys.exit("fixup_sources.py: in %s, nothing matched for: %s\n(the upstream source changed: update the rule)"
                  % (root, "; ".join(missed)))
     return changed
@@ -735,6 +740,10 @@ def apply_patch(root, patch):
             old_l = [l[1:] for l in body if l[:1] in (" ", "-")]
             new_l = [l[1:] for l in body if l[:1] in (" ", "+")]
             k = next((k for k in range(pos, len(cur) - len(old_l) + 1) if cur[k:k + len(old_l)] == old_l), -1)
+            if k < 0 and os.environ.get("SMS_FIXUP_LENIENT") == "1":
+                # Code only the newer sources have (Super Mario Sunburn's older BetterSunshineEngine).
+                print("fixup_sources.py: skipped hunk %d of %s (older source?)" % (i // 2 + 1, name), file=sys.stderr)
+                continue
             if k < 0: raise SystemExit("%s: hunk %d of %s does not apply" % (patch, i // 2 + 1, name))
             cur[k:k + len(old_l)] = new_l
             pos = k + len(new_l); applied += 1

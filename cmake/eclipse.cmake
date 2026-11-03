@@ -41,11 +41,20 @@ set(SMS_ECLIPSE_GIT_CACHE "${_eclipse_git_cache}" CACHE PATH
   "Where the Eclipse sources' downloads are kept for other build folders (empty: download for each)")
 
 # name  url  revision  [a folder the port doesn't use, left out of the checkout]
+# Super Mario Sunburn's disc carries BetterSunshineEngine v4.0.0 (built 2025-12-23, source revision
+# 74dd35c) and BetterSunshineMoveset built 2024-12-14 (4f83dfe), older than the ones Eclipse v1.1.0
+# needs, so a Sunburn build uses those (docs/SUNBURN.md).
+set(_bse_revision "bc6840e373d59a2601e7b5f9011732390561f6dd")
+set(_moveset_revision "2eb6f136cce4c0c7816808ad9dc3d1d95ef52b83")
+if(SMS_SUNBURN)
+  set(_bse_revision "74dd35cda6dbc4fd06bfa974b0a1892fc50083ef")
+  set(_moveset_revision "4f83dfe2dd0d2f7466e2e5f7afcc4b47967af20f")
+endif()
 set(_eclipse_repos
   "eclipse|https://github.com/JoshuaMKW/super-mario-eclipse|792e14fa1583910673ddae7e85048c6ddb4ba700"
   # compiler/: a 764 MB Windows clang for building BSE for the GameCube.
-  "bse|https://github.com/JoshuaMKW/BetterSunshineEngine|bc6840e373d59a2601e7b5f9011732390561f6dd|compiler"
-  "moveset|https://github.com/JoshuaMKW/BetterSunshineMoveset|2eb6f136cce4c0c7816808ad9dc3d1d95ef52b83"
+  "bse|https://github.com/JoshuaMKW/BetterSunshineEngine|${_bse_revision}|compiler"
+  "moveset|https://github.com/JoshuaMKW/BetterSunshineMoveset|${_moveset_revision}"
   "shi|https://github.com/JoshuaMKW/SunshineHeaderInterface|a0d858951e7fb22dce5304aa5c50287ecb0d6862")
 
 # Downloads `refspec` (a revision, or revision:ref) of `url` into the
@@ -157,7 +166,12 @@ if(_eclipse_git_cache)
   endforeach()
 endif()
 
-execute_process(COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/platform/mods/eclipse/fixup_sources.py
+set(_fixup_env "")
+if(SMS_SUNBURN)
+  # Older BetterSunshineEngine and Moveset than the fix-up rules were written for: warn, do not stop.
+  set(_fixup_env ${CMAKE_COMMAND} -E env SMS_FIXUP_LENIENT=1)
+endif()
+execute_process(COMMAND ${_fixup_env} ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/platform/mods/eclipse/fixup_sources.py
   "${SMS_ECLIPSE_SRC_DIR}/eclipse" "${SMS_ECLIPSE_SRC_DIR}/bse" "${SMS_ECLIPSE_SRC_DIR}/shi"
   "${SMS_ECLIPSE_SRC_DIR}/moveset"
   RESULT_VARIABLE _rc)

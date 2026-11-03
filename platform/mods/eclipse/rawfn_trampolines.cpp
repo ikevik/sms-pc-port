@@ -2,6 +2,7 @@
 // through SunshineHeaderInterface's SMS/raw_fn.hxx, by their retail names.
 // Each takes its arguments as a variadic call passes them and calls the
 // decomp's function; see the generator for the details.
+#include <JSystem/JStage/JSGCamera.hpp>
 #include <new>
 #include <stdint.h>
 #include <stdio.h>
@@ -1372,6 +1373,21 @@ extern "C" intptr_t sms_rawfn_xFadeBgm__10MSBgmXFadeFf(void* self, double p0)
 extern "C" auto sms_rawaddr_8029C6F8(void* self) -> decltype(((TMarDirector*)self)->TMarDirector::setup2())
 {
 	return ((TMarDirector*)self)->TMarDirector::setup2();
+}
+
+#if RAWFN_VARIADIC
+extern "C" intptr_t sms_rawfn_JSGSetProjectionFar__Q26JDrama7TCameraFf(...)
+{
+	va_list ap;
+	RAWFN_VA_START(ap);
+	void* self = rawfn_arg<void*>(ap);
+	double p0 = rawfn_arg<double>(ap);
+	va_end(ap);
+#else
+extern "C" intptr_t sms_rawfn_JSGSetProjectionFar__Q26JDrama7TCameraFf(void* self, double p0)
+{
+#endif
+	return rawfn_int([&]() -> decltype(((JDrama::TCamera*)self)->JDrama::TCamera::JSGSetProjectionFar((float)p0)) { return ((JDrama::TCamera*)self)->JDrama::TCamera::JSGSetProjectionFar((float)p0); });
 }
 
 static const struct {
