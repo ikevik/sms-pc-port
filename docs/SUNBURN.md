@@ -20,7 +20,7 @@ SMS_DISC_IMAGE="mods/sunburn/Super Mario Sunburn.iso" build/<os>-<arch>-sunburn/
 
 `SMS_SUNBURN` uses the port's code-mod support ([ECLIPSE.md](ECLIPSE.md) describes it: the hook registry, the header shims and the fix-up of the engine's sources), with Sunburn's own modules and the engine revisions its disc carries:
 
-- BetterSunshineEngine at `74dd35c` (v4.0.0, built 2025-12-23 on the disc) and BetterSunshineMoveset at `4f83dfe` (built 2024-12-14), not the newer ones Eclipse v1.1.0 needs. Their sources are fetched and fixed up as for Eclipse; rules and patch hunks for code the older sources lack are skipped with a warning (`SMS_FIXUP_LENIENT`, set for Sunburn builds only).
+- BetterSunshineEngine and Moveset at the revisions the port's hooks are written for (Eclipse v1.1.0's: `bc6840e` and `2eb6f13`). The disc itself carries older ones (BetterSunshineEngine v4.0.0, source `74dd35c`, built 2025-12-23; Moveset `4f83dfe`, built 2024-12-14). With those the game lagged and its audio distorted, so they are behind `-DSMS_SUNBURN_DISC_ENGINE=ON`; the fix-up then runs in a lenient mode (`SMS_FIXUP_LENIENT`) that skips rules and hunks for code the older sources lack.
 - [platform/mods/sunburn/sunburn.cpp](../platform/mods/sunburn/sunburn.cpp) (settings, ending, red coins, nozzle box, area exit) and [yoshi.cpp](../platform/mods/sunburn/yoshi.cpp) (the green Yoshi), both written from `SuperMarioSunburn.kxe`.
 
 Nothing of Super Mario Eclipse is fetched or built. The hooks the game source needs are in `decomp-patches/zz-modhook-55-sunburn.patch` and the existing `modhook-*` patches.

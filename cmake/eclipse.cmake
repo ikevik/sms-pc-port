@@ -43,10 +43,13 @@ set(SMS_ECLIPSE_GIT_CACHE "${_eclipse_git_cache}" CACHE PATH
 # name  url  revision  [a folder the port doesn't use, left out of the checkout]
 # Super Mario Sunburn's disc carries BetterSunshineEngine v4.0.0 (built 2025-12-23, source revision
 # 74dd35c) and BetterSunshineMoveset built 2024-12-14 (4f83dfe), older than the ones Eclipse v1.1.0
-# needs, so a Sunburn build uses those (docs/SUNBURN.md).
+# needs. The port's hooks are written for the newer ones, and with the older the game lagged and
+# its audio distorted, so a Sunburn build uses the newer by default; SMS_SUNBURN_DISC_ENGINE=ON
+# builds the disc's (docs/SUNBURN.md).
+option(SMS_SUNBURN_DISC_ENGINE "Sunburn: build the engine revisions the Sunburn disc carries, not the newer ones" OFF)
 set(_bse_revision "bc6840e373d59a2601e7b5f9011732390561f6dd")
 set(_moveset_revision "2eb6f136cce4c0c7816808ad9dc3d1d95ef52b83")
-if(SMS_SUNBURN)
+if(SMS_SUNBURN AND SMS_SUNBURN_DISC_ENGINE)
   set(_bse_revision "74dd35cda6dbc4fd06bfa974b0a1892fc50083ef")
   set(_moveset_revision "4f83dfe2dd0d2f7466e2e5f7afcc4b47967af20f")
 endif()
@@ -175,7 +178,7 @@ endif()
 
 set(_fixup_env "")
 if(SMS_SUNBURN)
-  # Older BetterSunshineEngine and Moveset than the fix-up rules were written for: warn, do not stop.
+  # No Eclipse sources, and possibly older engine sources than the rules were written for: warn.
   set(_fixup_env ${CMAKE_COMMAND} -E env SMS_FIXUP_LENIENT=1)
 endif()
 execute_process(COMMAND ${_fixup_env} ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/platform/mods/eclipse/fixup_sources.py
