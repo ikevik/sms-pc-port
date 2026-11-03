@@ -9,8 +9,8 @@
 To find which patches of a mod change the game, a patch can be switched off by its retail
 address (SMS_MOD_DISABLE, platform/mods/modhooks.cpp); this does it by source file. It starts
 the game once for a few seconds to read its patch list (SMS_MOD_LIST), then starts it for real
-with every patch from the named files off. A name is a file's base name (green_mode.cpp) or a
-folder and file (patches/water.cpp). Use a new --save folder for each run: a save keeps what
+with every patch from the named files off. A name is a file's base name (green_mode.cpp), a
+folder and file (patches/water.cpp) or a whole folder (moveset/). Use a new --save folder for each run: a save keeps what
 was collected in it.
 """
 
@@ -55,7 +55,10 @@ def patch_list(exe, iso, seconds):
 
 
 def matches(path, name):
+    """A base name (green_mode.cpp), a folder and file (patches/water.cpp), or a folder (moveset/)."""
     path = path.replace("\\", "/")
+    if name.endswith("/"):
+        return ("/" + name) in path or path.startswith(name)
     return path.endswith("/" + name) or path == name
 
 
